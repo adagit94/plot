@@ -83,6 +83,10 @@ export const PointChart = React.memo(
             valueInfo,
             isItemActive: isPointActive,
             valueInfoItemsRef,
+            activateSelectionRect,
+            deactivateSelectionRect,
+            onSelectionRectResize,
+            selectionRect,
         } = useValueInfo({
             xBaseline,
             divideOffset,
@@ -90,7 +94,12 @@ export const PointChart = React.memo(
 
         const createPoint = React.useCallback(
             (xCoord: number, yCoord: number, xVal: number, yVal: number, index: number) => {
-                const valueInfoItem = { index, yVal, txt: `x: ${xVal}, y: ${yVal}` };
+                const valueInfoItem = {
+                    index,
+                    yVal,
+                    coords: { x1: xCoord - pointR, x2: xCoord + pointR, y1: yCoord - pointR, y2: yCoord + pointR },
+                    txt: `x: ${xVal}, y: ${yVal}`,
+                };
                 const isActive = isPointActive(index);
 
                 valueInfoItemsRef.current.push(valueInfoItem);
@@ -190,6 +199,9 @@ export const PointChart = React.memo(
                 viewBox={`0 0 ${width} ${height}`}
                 onClick={clearValueInfoItems}
                 onKeyDown={onKeyDown}
+                onMouseDown={activateSelectionRect}
+                onMouseUp={deactivateSelectionRect}
+                onMouseMove={onSelectionRectResize}
                 tabIndex={-1}
                 xmlns="http://www.w3.org/2000/svg"
             >
@@ -204,6 +216,8 @@ export const PointChart = React.memo(
                 {referenceLine}
 
                 {points}
+
+                {selectionRect}
 
                 {valueInfo}
             </svg>

@@ -66,6 +66,10 @@ export const PillarChart = React.memo(
             valueInfo,
             isItemActive: isPointActive,
             valueInfoItemsRef,
+            activateSelectionRect,
+            deactivateSelectionRect,
+            onSelectionRectResize,
+            selectionRect,
         } = useValueInfo({
             xBaseline,
             divideOffset,
@@ -79,7 +83,12 @@ export const PillarChart = React.memo(
                 const x2Coord = xBaseline + gridWidth * (x2Val / xMax);
                 const yCoord = yBaseline - gridHeight * (yVal / yMax);
 
-                const valueInfoItem = { index, yVal, txt: `interval: ${x1Val} - ${x2Val}, y: ${yVal}` };
+                const valueInfoItem = {
+                    index,
+                    yVal,
+                    coords: { x1: x1Coord, x2: x2Coord, y1: yCoord, y2: yBaseline },
+                    txt: `interval: ${x1Val} - ${x2Val}, y: ${yVal}`,
+                };
                 const isActive = isPointActive(index);
 
                 valueInfoItemsRef.current.push(valueInfoItem);
@@ -145,6 +154,9 @@ export const PillarChart = React.memo(
                     viewBox={`0 0 ${width} ${height}`}
                     onClick={clearValueInfoItems}
                     onKeyDown={onKeyDown}
+                    onMouseDown={activateSelectionRect}
+                    onMouseUp={deactivateSelectionRect}
+                    onMouseMove={onSelectionRectResize}
                     tabIndex={-1}
                     xmlns="http://www.w3.org/2000/svg"
                 >
@@ -159,6 +171,8 @@ export const PillarChart = React.memo(
                     {referenceLine}
 
                     {rectangles}
+
+                    {selectionRect}
 
                     {valueInfo}
                 </svg>
