@@ -1,7 +1,7 @@
 import * as React from "react";
 import { ChartProps } from "../../types";
 import { useReferenceLine } from "../../useReferenceLine";
-import { useValueInfo } from "../../useValueInfo";
+import { PointChartItemInfo, useValueInfo, valueInfoCreators } from "../../useValueInfo";
 import { getValueXOffset, createXDivides, createYDivides } from "../../utils";
 
 type PointChartProps = ChartProps & {
@@ -87,18 +87,20 @@ export const PointChart = React.memo(
             deactivateSelectionRect,
             onSelectionRectResize,
             selectionRect,
-        } = useValueInfo({
+        } = useValueInfo<PointChartItemInfo>({
             xBaseline,
             divideOffset,
+            spacing,
+            fontSize,
+            infoCreators: { single: valueInfoCreators.singlePoint, multiple: valueInfoCreators.multiplePoints },
         });
 
         const createPoint = React.useCallback(
             (xCoord: number, yCoord: number, xVal: number, yVal: number, index: number) => {
-                const valueInfoItem = {
+                const valueInfoItem: PointChartItemInfo = {
                     index,
-                    yVal,
                     coords: { x1: xCoord - pointR, x2: xCoord + pointR, y1: yCoord - pointR, y2: yCoord + pointR },
-                    txt: `x: ${xVal}, y: ${yVal}`,
+                    values: { x: xVal, y: yVal },
                 };
                 const isActive = isPointActive(index);
 

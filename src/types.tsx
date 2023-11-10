@@ -1,4 +1,7 @@
-export type ChartVariant = "point" | "pillar"
+export enum ChartFlag {
+    Point,
+    Pillar,
+}
 
 export type ChartProps = {
     width: number;
@@ -7,7 +10,7 @@ export type ChartProps = {
     ySteps: number;
     divideLength: number;
     fontSize: number;
-    spacing: number
+    spacing: number;
     xLimit?: number;
     yLimit?: number;
     xPrecision?: number;

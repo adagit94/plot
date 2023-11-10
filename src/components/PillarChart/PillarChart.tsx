@@ -1,7 +1,7 @@
 import * as React from "react";
 import { ChartProps } from "../../types";
 import { useReferenceLine } from "../../useReferenceLine";
-import { useValueInfo } from "../../useValueInfo";
+import { PillarChartItemInfo, useValueInfo, valueInfoCreators } from "../../useValueInfo";
 import { getValueXOffset, createXDivides, createYDivides } from "../../utils";
 
 type PillarChartProps = ChartProps & {
@@ -70,9 +70,12 @@ export const PillarChart = React.memo(
             deactivateSelectionRect,
             onSelectionRectResize,
             selectionRect,
-        } = useValueInfo({
+        } = useValueInfo<PillarChartItemInfo>({
             xBaseline,
             divideOffset,
+            spacing,
+            fontSize,
+            infoCreators: { single: valueInfoCreators.singleInterval, multiple: valueInfoCreators.multipleIntervals },
         });
 
         const plot = React.useCallback(() => {
@@ -83,11 +86,10 @@ export const PillarChart = React.memo(
                 const x2Coord = xBaseline + gridWidth * (x2Val / xMax);
                 const yCoord = yBaseline - gridHeight * (yVal / yMax);
 
-                const valueInfoItem = {
+                const valueInfoItem: PillarChartItemInfo = {
                     index,
-                    yVal,
                     coords: { x1: x1Coord, x2: x2Coord, y1: yCoord, y2: yBaseline },
-                    txt: `interval: ${x1Val} - ${x2Val}, y: ${yVal}`,
+                    values: { x1: x1Val, x2: x2Val, y: yVal },
                 };
                 const isActive = isPointActive(index);
 
