@@ -1,12 +1,6 @@
 import * as React from "react";
 
-export const getValueCharsCount = (value: number, precision: number) => Number(value).toFixed(precision ?? 0).length;
-
-export const getValueXOffset = (value: number, precision: number, fontSize: number) => (getValueCharsCount(value, precision) * fontSize) / 2;
-
-export const getValueXOffsetForChars = (chars: number, fontSize: number) => (chars * fontSize) / 2;
-
-type CreateXDivides = (params: {
+type CreateDividesBase = {
     length: number;
     max: number;
     steps: number;
@@ -16,9 +10,20 @@ type CreateXDivides = (params: {
     fontSize: number;
     divideOffset: number;
     precision?: number;
-}) => JSX.Element[];
+};
 
-export const createXDivides: CreateXDivides = ({ length, max, steps, xBaseline, yBaseline, spacing, fontSize, divideOffset, precision }) => {
+export const createXDivides = ({
+    length,
+    max,
+    steps,
+    xBaseline,
+    yBaseline,
+    spacing,
+    divideOffset,
+    precision,
+    textsWidths,
+    fontSize,
+}: CreateDividesBase & { textsWidths: number[] }) => {
     const divides: JSX.Element[] = [];
 
     const valueStep = max / steps;
@@ -33,8 +38,8 @@ export const createXDivides: CreateXDivides = ({ length, max, steps, xBaseline, 
         const txt = (
             <text
                 key={`tx${i}`}
-                className="chart__divide-txt"
-                x={xOffset - getValueXOffsetForChars(displayValue.length, fontSize) / 2}
+                className="chart__divide-txt chart__divide-txt--x"
+                x={xOffset - ((textsWidths[i] ?? 0) / 2)}
                 y={verticalDivideY1 + spacing}
                 fontSize={fontSize}
                 dominantBaseline={"hanging"}
@@ -46,10 +51,21 @@ export const createXDivides: CreateXDivides = ({ length, max, steps, xBaseline, 
         divides.push(line, txt);
     }
 
-    return divides
+    return divides;
 };
 
-export const createYDivides: CreateXDivides = ({ length, max, steps, xBaseline, yBaseline, spacing, fontSize, divideOffset, precision }) => {
+export const createYDivides = ({
+    length,
+    max,
+    steps,
+    xBaseline,
+    yBaseline,
+    spacing,
+    divideOffset,
+    precision,
+    textsWidths,
+    fontSize,
+}: CreateDividesBase & { textsWidths: number[] }) => {
     const divides: JSX.Element[] = [];
 
     const valueStep = max / steps;
@@ -60,14 +76,12 @@ export const createYDivides: CreateXDivides = ({ length, max, steps, xBaseline, 
     for (let i = 0, yOffset = yBaseline - step, value = valueStep; i < steps; i++, yOffset -= step, value += valueStep) {
         const displayValue = Number(value).toFixed(precision ?? 0);
 
-        const line = (
-            <line key={`ly${i}`} className="chart__divide" x1={horizontalDivideX1} y1={yOffset} x2={horizontalDivideX2} y2={yOffset} />
-        );
+        const line = <line key={`ly${i}`} className="chart__divide" x1={horizontalDivideX1} y1={yOffset} x2={horizontalDivideX2} y2={yOffset} />;
         const txt = (
             <text
                 key={`ty${i}`}
-                className="chart__divide-txt"
-                x={horizontalDivideX1 - spacing - getValueXOffsetForChars(displayValue.length, fontSize)}
+                className="chart__divide-txt chart__divide-txt--y"
+                x={horizontalDivideX1 - spacing - (textsWidths[i] ?? 0)}
                 y={yOffset}
                 fontSize={fontSize}
                 dominantBaseline={"middle"}
@@ -81,3 +95,17 @@ export const createYDivides: CreateXDivides = ({ length, max, steps, xBaseline, 
 
     return divides;
 };
+
+export const getBoundingRects = (els: NodeListOf<Element>) => {
+    let rects: DOMRect[] = [];
+
+    for (const el of els) {
+        rects.push(el.getBoundingClientRect());
+    }
+
+    return rects;
+};
+
+type PrimitiveArr = (string | number | boolean)[];
+
+export const comparePrimitiveArrays = (a: PrimitiveArr, b: PrimitiveArr) => a.length === b.length && a.every((x, i) => x === b[i]);

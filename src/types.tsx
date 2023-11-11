@@ -9,8 +9,8 @@ export type ChartProps = {
     xSteps: number;
     ySteps: number;
     divideLength: number;
-    fontSize: number;
     spacing: number;
+    fontSize: number;
     xLimit?: number;
     yLimit?: number;
     xPrecision?: number;

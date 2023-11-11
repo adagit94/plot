@@ -2,7 +2,7 @@ import * as React from "react";
 import { ChartProps } from "../../types";
 import { useReferenceLine } from "../../useReferenceLine";
 import { PointChartItemInfo, useValueInfo, valueInfoCreators } from "../../useValueInfo";
-import { getValueXOffset, createXDivides, createYDivides } from "../../utils";
+import { comparePrimitiveArrays, createXDivides, createYDivides, getBoundingRects } from "../../utils";
 
 type PointChartProps = ChartProps & {
     pointR: number;
@@ -20,19 +20,24 @@ export const PointChart = React.memo(
         yLimit,
         values,
         pointR,
-        fontSize,
         divideLength,
         xPrecision,
         yPrecision,
         connectPoints,
         spacing,
+        fontSize,
     }: PointChartProps) => {
+        const [xTextsWidths, setXTextsWidths] = React.useState<number[]>([]);
+        const [yTextsWidths, setYTextsWidths] = React.useState<number[]>([]);
+
+        const containerRef = React.useRef<SVGElement>();
+
         const xMax = React.useMemo(() => xLimit ?? Math.max(...values.map(([x]) => x)), [xLimit, values]);
         const yMax = React.useMemo(() => yLimit ?? Math.max(...values.map(([_x, y]) => y)), [yLimit, values]);
 
         const divideOffset = divideLength / 2;
 
-        const xOffset = getValueXOffset(yMax, yPrecision ?? 0, fontSize) + spacing + divideOffset;
+        const xOffset = React.useMemo(() => (yTextsWidths.length > 0 ? Math.max(...yTextsWidths) : 0) + spacing + divideOffset, [divideOffset, spacing, yTextsWidths]);
         const yOffset = fontSize + spacing + divideOffset;
 
         const gridWidth = width - xOffset - spacing;
@@ -50,11 +55,12 @@ export const PointChart = React.memo(
                     yBaseline,
                     divideOffset,
                     xBaseline,
-                    fontSize,
+                    textsWidths: xTextsWidths,
                     precision: xPrecision,
-                    spacing: spacing,
+                    spacing,
+                    fontSize,
                 }),
-            [divideOffset, fontSize, gridWidth, spacing, xBaseline, xMax, xPrecision, xSteps, yBaseline]
+            [divideOffset, xTextsWidths, gridWidth, spacing, xBaseline, xMax, xPrecision, xSteps, yBaseline, fontSize]
         );
 
         const yDivides = React.useMemo(
@@ -66,11 +72,12 @@ export const PointChart = React.memo(
                     yBaseline,
                     divideOffset,
                     xBaseline,
-                    fontSize,
+                    textsWidths: yTextsWidths,
                     precision: yPrecision,
-                    spacing: spacing,
+                    spacing,
+                    fontSize,
                 }),
-            [divideOffset, fontSize, gridHeight, spacing, xBaseline, yBaseline, yMax, yPrecision, ySteps]
+            [divideOffset, yTextsWidths, gridHeight, spacing, xBaseline, yBaseline, yMax, yPrecision, ySteps, fontSize]
         );
 
         const { referenceLine, setReferenceLine } = useReferenceLine({ xBaseline, width, spacing });
@@ -192,10 +199,29 @@ export const PointChart = React.memo(
             [setAllValueInfoItems]
         );
 
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+        React.useEffect(() => {
+            const container = containerRef.current;
+
+            if (!container) return;
+
+            const newXTextsWidths = getBoundingRects(container.querySelectorAll(".chart__divide-txt--x")).map(({ width }) => Math.round(width));
+            const newYTextsWidths = getBoundingRects(container.querySelectorAll(".chart__divide-txt--y")).map(({ width }) => Math.round(width));
+
+            if (!comparePrimitiveArrays(newXTextsWidths, xTextsWidths)) {
+                setXTextsWidths(newXTextsWidths);
+            }
+
+            if (!comparePrimitiveArrays(newYTextsWidths, yTextsWidths)) {
+                setYTextsWidths(newYTextsWidths);
+            }
+        });
+
         return (
             <svg
                 className="chart point-chart"
                 style={{ outline: "none" }}
+                ref={containerRef as React.LegacyRef<SVGSVGElement>}
                 width={width}
                 height={height}
                 viewBox={`0 0 ${width} ${height}`}

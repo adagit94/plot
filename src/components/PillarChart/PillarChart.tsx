@@ -2,7 +2,7 @@ import * as React from "react";
 import { ChartProps } from "../../types";
 import { useReferenceLine } from "../../useReferenceLine";
 import { PillarChartItemInfo, useValueInfo, valueInfoCreators } from "../../useValueInfo";
-import { getValueXOffset, createXDivides, createYDivides } from "../../utils";
+import { comparePrimitiveArrays, createXDivides, createYDivides, getBoundingRects } from "../../utils";
 
 type PillarChartProps = ChartProps & {
     values: [[number, number], number][]; // [[x1, x2], y]; values themself, not coordinates; x1 and x2 defines interval on x axis
@@ -10,12 +10,17 @@ type PillarChartProps = ChartProps & {
 
 export const PillarChart = React.memo(
     ({ width, height, xLimit, xSteps, ySteps, yLimit, values, fontSize, divideLength, xPrecision, yPrecision, spacing }: PillarChartProps) => {
+        const [xTextsWidths, setXTextsWidths] = React.useState<number[]>([]);
+        const [yTextsWidths, setYTextsWidths] = React.useState<number[]>([]);
+
+        const containerRef = React.useRef<SVGElement>();
+
         const xMax = React.useMemo(() => xLimit ?? Math.max(...values.map(([[_x1, x2]]) => x2)), [xLimit, values]);
         const yMax = React.useMemo(() => yLimit ?? Math.max(...values.map(([_x, y]) => y)), [yLimit, values]);
 
         const divideOffset = divideLength / 2;
 
-        const xOffset = getValueXOffset(yMax, yPrecision ?? 0, fontSize) + spacing + divideOffset;
+        const xOffset = React.useMemo(() => (yTextsWidths.length > 0 ? Math.max(...yTextsWidths) : 0) + spacing + divideOffset, [divideOffset, spacing, yTextsWidths]);
         const yOffset = fontSize + spacing + divideOffset;
 
         const gridWidth = width - xOffset - spacing;
@@ -36,8 +41,9 @@ export const PillarChart = React.memo(
                     fontSize,
                     precision: xPrecision,
                     spacing,
+                    textsWidths: xTextsWidths,
                 }),
-            [divideOffset, fontSize, gridWidth, spacing, xBaseline, xMax, xPrecision, xSteps, yBaseline]
+            [divideOffset, fontSize, gridWidth, spacing, xBaseline, xMax, xPrecision, xSteps, yBaseline, xTextsWidths]
         );
 
         const yDivides = React.useMemo(
@@ -52,8 +58,9 @@ export const PillarChart = React.memo(
                     fontSize,
                     precision: yPrecision,
                     spacing,
+                    textsWidths: yTextsWidths,
                 }),
-            [divideOffset, fontSize, gridHeight, spacing, xBaseline, yBaseline, yMax, yPrecision, ySteps]
+            [divideOffset, fontSize, gridHeight, spacing, xBaseline, yBaseline, yMax, yPrecision, ySteps, yTextsWidths]
         );
 
         const { referenceLine, setReferenceLine } = useReferenceLine({ xBaseline, width, spacing });
@@ -146,39 +153,56 @@ export const PillarChart = React.memo(
             [setAllValueInfoItems]
         );
 
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+        React.useEffect(() => {
+            const container = containerRef.current;
+
+            if (!container) return;
+
+            const newXTextsWidths = getBoundingRects(container.querySelectorAll(".chart__divide-txt--x")).map(({ width }) => Math.round(width));
+            const newYTextsWidths = getBoundingRects(container.querySelectorAll(".chart__divide-txt--y")).map(({ width }) => Math.round(width));
+
+            if (!comparePrimitiveArrays(newXTextsWidths, xTextsWidths)) {
+                setXTextsWidths(newXTextsWidths);
+            }
+
+            if (!comparePrimitiveArrays(newYTextsWidths, yTextsWidths)) {
+                setYTextsWidths(newYTextsWidths);
+            }
+        });
+
         return (
-            <div>
-                <svg
-                    className="chart pillar-chart"
-                    style={{ outline: "none" }}
-                    width={width}
-                    height={height}
-                    viewBox={`0 0 ${width} ${height}`}
-                    onClick={clearValueInfoItems}
-                    onKeyDown={onKeyDown}
-                    onMouseDown={activateSelectionRect}
-                    onMouseUp={deactivateSelectionRect}
-                    onMouseMove={onSelectionRectResize}
-                    tabIndex={-1}
-                    xmlns="http://www.w3.org/2000/svg"
-                >
-                    <circle r={0} cx={xBaseline} cy={yBaseline} />
+            <svg
+                className="chart pillar-chart"
+                style={{ outline: "none" }}
+                ref={containerRef as React.LegacyRef<SVGSVGElement>}
+                width={width}
+                height={height}
+                viewBox={`0 0 ${width} ${height}`}
+                onClick={clearValueInfoItems}
+                onKeyDown={onKeyDown}
+                onMouseDown={activateSelectionRect}
+                onMouseUp={deactivateSelectionRect}
+                onMouseMove={onSelectionRectResize}
+                tabIndex={-1}
+                xmlns="http://www.w3.org/2000/svg"
+            >
+                <circle r={0} cx={xBaseline} cy={yBaseline} />
 
-                    <line className="chart__axis" x1={xBaseline} y1={yBaseline} x2={width - spacing} y2={yBaseline} />
-                    <line className="chart__axis" x1={xBaseline} y1={yBaseline} x2={xBaseline} y2={spacing} />
+                <line className="chart__axis" x1={xBaseline} y1={yBaseline} x2={width - spacing} y2={yBaseline} />
+                <line className="chart__axis" x1={xBaseline} y1={yBaseline} x2={xBaseline} y2={spacing} />
 
-                    {xDivides}
-                    {yDivides}
+                {xDivides}
+                {yDivides}
 
-                    {referenceLine}
+                {referenceLine}
 
-                    {rectangles}
+                {rectangles}
 
-                    {selectionRect}
+                {selectionRect}
 
-                    {valueInfo}
-                </svg>
-            </div>
+                {valueInfo}
+            </svg>
         );
     }
 );
