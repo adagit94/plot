@@ -34,7 +34,7 @@ export const ConnectedSides = React.memo(({ width, height, spacing, fontSize, po
     );
 
     const els = React.useMemo(() => {
-        let els: JSX.Element[] = [];
+        let points: JSX.Element[] = [];
         let coords: [{ x: number; y: number }[], { x: number; y: number }[]] = [[], []];
         let itemIndex = 0;
 
@@ -51,16 +51,12 @@ export const ConnectedSides = React.memo(({ width, height, spacing, fontSize, po
                 const item = side[j];
                 const itemCoords = (coords[i][j] = { x: pointsXOffsets[i](maxTxtWidth), y: offset });
                 const { txt, connections } = item;
-                const isActive =
-                    activePoint &&
-                    ((activePoint.side === i && activePoint.point === j) ||
-                        (i !== activePoint.side && activePoint.connections?.includes(j)) ||
-                        (i !== activePoint.side && connections?.includes(activePoint.point)));
+                const isActive = activePoint && activePoint.side === i && activePoint.point === j;
 
                 const point = (
                     <circle
                         key={`p${i}${j}`}
-                        className={`connected-sides__point${isActive ? ` connected-sides__point--active` : ""}`}
+                        className={`connected-sides__point connected-sides__point--side-${i}${isActive ? ` connected-sides__point--active` : ""}`}
                         cx={itemCoords.x}
                         cy={itemCoords.y}
                         r={pointR}
@@ -83,11 +79,13 @@ export const ConnectedSides = React.memo(({ width, height, spacing, fontSize, po
                     </text>
                 );
 
-                els.push(point, text);
+                points.push(point, text);
                 itemIndex++;
             }
         }
 
+        let lines: JSX.Element[] = []
+        
         for (let i = 0; i < sides.length; i++) {
             const items = sides[i];
             const currentSideCoords = coords[i];
@@ -99,6 +97,7 @@ export const ConnectedSides = React.memo(({ width, height, spacing, fontSize, po
                 if (connections === undefined) continue;
 
                 const { x: xFrom, y: yFrom } = currentSideCoords[j];
+                const isActive = activePoint && activePoint.side === i && activePoint.point === j;
 
                 for (let k = 0; k < connections.length; k++) {
                     const destIndex = connections[k];
@@ -107,16 +106,11 @@ export const ConnectedSides = React.memo(({ width, height, spacing, fontSize, po
                     if (destCoords === undefined) continue;
 
                     const { x: xTo, y: yTo } = destCoords;
-                    const isActive =
-                        activePoint &&
-                        ((activePoint.side === i && activePoint.point === j) ||
-                            (i !== activePoint.side && activePoint.connections?.includes(j)) ||
-                            (i !== activePoint.side && connections?.includes(activePoint.point)));
 
-                    els[isActive ? "push" : "unshift"](
+                    lines[isActive ? "push" : "unshift"](
                         <line
                             key={`l${i}${j}${k}`}
-                            className={`connected-sides__line${isActive ? " connected-sides__line--active" : ""}`}
+                            className={`connected-sides__line connected-sides__line--side-${i}${isActive ? " connected-sides__line--active" : ""}`}
                             x1={xFrom}
                             y1={yFrom}
                             x2={xTo}
@@ -128,7 +122,7 @@ export const ConnectedSides = React.memo(({ width, height, spacing, fontSize, po
             }
         }
 
-        return els;
+        return [...lines, ...points];
     }, [sides, height, pointR, pointsXOffsets, activePoint, txtsXOffsets, textsWidths, fontSize]);
 
     // eslint-disable-next-line react-hooks/exhaustive-deps
