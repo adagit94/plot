@@ -1,7 +1,7 @@
 import * as React from "react";
-import { ChartProps } from "../../types";
-import { useReferenceLine } from "../../useReferenceLine";
-import { PillarChartItemInfo, useValueInfo, valueInfoCreators } from "../../useValueInfo";
+import { ChartProps } from "../ChartCommonTypes";
+import { useReferenceLine } from "../../hooks/useReferenceLine";
+import { PillarChartItemInfo, useValueInfo, valueInfoCreators } from "../../hooks/useValueInfo";
 import { comparePrimitiveArrays, createXDivides, createYDivides, getBoundingRects } from "../../utils";
 
 type PillarChartProps = ChartProps & {
