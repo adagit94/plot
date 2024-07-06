@@ -1,12 +1,13 @@
 import * as React from "react";
-import { ChartProps } from "../ChartCommonTypes";
+import { AxesValues, ChartProps } from "../ChartCommonTypes";
 import { useReferenceLine } from "../../hooks/useReferenceLine";
 import { PointChartItemInfo, useValueInfo, valueInfoCreators } from "../../hooks/useValueInfo";
-import { comparePrimitiveArrays, createXDivides, createYDivides, getBoundingRects } from "../../utils";
+import { comparePrimitiveArrays, createMilestoneLine, createXDivides, createYDivides, getBoundingRects, getCoord } from "../../utils";
+import useZoomer from "../../hooks/useZoomer";
 
 type PointChartProps = ChartProps & {
     pointR: number;
-    values: [number, number][]; // [x, y]; values themself, not coordinates
+    values: AxesValues; // [x, y]; values themself, not coordinates
     connectPoints?: boolean;
 };
 
@@ -14,73 +15,118 @@ export const PointChart = React.memo(
     ({
         width,
         height,
-        xLimit,
         xSteps,
         ySteps,
-        yLimit,
         values,
-        pointR,
         divideLength,
         xPrecision,
         yPrecision,
+        valueInfoXPrecision,
+        valueInfoYPrecision,
         connectPoints,
         spacing,
         fontSize,
+        valueInfoFontSize,
+        xMilestones,
+        yMilestones,
+        zoomXStep,
+        zoomYStep,
+        xMaxValue,
+        yMaxValue,
+        pointR: basePointR,
     }: PointChartProps) => {
         const [xTextsWidths, setXTextsWidths] = React.useState<number[]>([]);
         const [yTextsWidths, setYTextsWidths] = React.useState<number[]>([]);
 
         const containerRef = React.useRef<SVGElement>();
 
-        const xMax = React.useMemo(() => xLimit ?? Math.max(...values.map(([x]) => x)), [xLimit, values]);
-        const yMax = React.useMemo(() => yLimit ?? Math.max(...values.map(([_x, y]) => y)), [yLimit, values]);
+        const xMax = React.useMemo(() => xMaxValue ?? Math.max(...values.map(([x]) => x)), [values, xMaxValue]);
+        const yMax = React.useMemo(() => yMaxValue ?? Math.max(...values.map(([_x, y]) => y)), [values, yMaxValue]);
 
         const divideOffset = divideLength / 2;
 
         const xOffset = React.useMemo(() => (yTextsWidths.length > 0 ? Math.max(...yTextsWidths) : 0) + spacing + divideOffset, [divideOffset, spacing, yTextsWidths]);
-        const yOffset = fontSize + spacing + divideOffset;
+        const yTopOffset = fontSize / 2 + valueInfoFontSize * 2;
+        const yBottomOffset = fontSize + spacing + divideOffset;
 
-        const gridWidth = width - xOffset - spacing;
-        const gridHeight = height - yOffset - spacing;
+        const gridWidth = width - xOffset - (xTextsWidths[xTextsWidths.length - 1] ?? 0) / 2;
+        const gridHeight = height - yBottomOffset - yTopOffset;
 
-        const xBaseline = xOffset;
-        const yBaseline = height - yOffset;
+        const xOrigin = xOffset;
+        const yOrigin = height - yBottomOffset;
 
-        const xDivides = React.useMemo(
+        const xAxisPxRange: [number, number] = React.useMemo(() => [xOrigin, xOrigin + gridWidth], [xOrigin, gridWidth])
+        const yAxisPxRange: [number, number] = React.useMemo(() => [yOrigin, yOrigin - gridHeight], [yOrigin, gridHeight])
+
+        const { zoom, zoomValues } = useZoomer({ values, xOffset, xAxisBorderline: xAxisPxRange[1], xMax, yOffset: yTopOffset, yAxisBorderline: yOrigin, yMax, xStep: zoomXStep, yStep: zoomYStep })
+
+        const pointRScale = (zoomValues.xMax / xMax + zoomValues.yMax / yMax) / 2
+        const pointR = basePointR / pointRScale
+
+        const [xDivides, xDividesValues, xDividesCoords] = React.useMemo(
             () =>
                 createXDivides({
-                    max: xMax,
+                    xOrigin,
+                    yOrigin,
+                    spacing,
+                    fontSize,
+                    divideOffset,
+                    valueRange: [0, zoomValues.xMax],
                     steps: xSteps,
                     length: gridWidth,
-                    yBaseline,
-                    divideOffset,
-                    xBaseline,
                     textsWidths: xTextsWidths,
                     precision: xPrecision,
-                    spacing,
-                    fontSize,
                 }),
-            [divideOffset, xTextsWidths, gridWidth, spacing, xBaseline, xMax, xPrecision, xSteps, yBaseline, fontSize]
+            [divideOffset, xTextsWidths, gridWidth, spacing, zoomValues, xPrecision, xSteps, yOrigin, fontSize, xOrigin]
         );
 
-        const yDivides = React.useMemo(
+        const [yDivides, yDividesValues, yDividesCoords] = React.useMemo(
             () =>
                 createYDivides({
-                    max: yMax,
-                    steps: ySteps,
-                    length: gridHeight,
-                    yBaseline,
+                    xOrigin,
+                    yOrigin,
                     divideOffset,
-                    xBaseline,
-                    textsWidths: yTextsWidths,
-                    precision: yPrecision,
                     spacing,
                     fontSize,
+                    valueRange: [0, zoomValues.yMax],
+                    steps: ySteps,
+                    length: gridHeight,
+                    textsWidths: yTextsWidths,
+                    precision: yPrecision,
                 }),
-            [divideOffset, yTextsWidths, gridHeight, spacing, xBaseline, yBaseline, yMax, yPrecision, ySteps, fontSize]
+            [divideOffset, yTextsWidths, gridHeight, spacing, xOrigin, zoomValues, yPrecision, ySteps, fontSize, yOrigin]
         );
 
-        const { referenceLine, setReferenceLine } = useReferenceLine({ xBaseline, width, spacing });
+        const xMilestoneLines = React.useMemo(() => {
+            const createLine = (val: number, index: number, coord?: number) => createMilestoneLine({ val, index, axis: "x", origin: xOrigin, length: gridWidth, coords: { y1: yAxisPxRange[0], y2: yAxisPxRange[1] }, min: 0, max: zoomValues.xMax, coord })
+
+            if (xMilestones === "values") {
+                return zoomValues.values.map(([xVal], index) => createLine(xVal, index))
+            } else if (xMilestones === "divides") {
+                return xDividesCoords.map((coord, index) => createLine(xDividesValues[index], index, coord))
+            } else if (Array.isArray(xMilestones)) {
+                return xMilestones.map((val, index) => createLine(val, index))
+            }
+
+            return []
+        }, [gridWidth, xMilestones, xOrigin, yAxisPxRange, zoomValues, xDividesValues, xDividesCoords])
+
+        const yMilestoneLines = React.useMemo(() => {
+            const createLine = (val: number, index: number, coord?: number) => createMilestoneLine({ val, index, axis: "y", origin: yOrigin, length: -gridHeight, coords: { x1: xAxisPxRange[0], x2: xAxisPxRange[1] }, min: 0, max: zoomValues.yMax, coord })
+
+            if (yMilestones === "values") {
+                return zoomValues.values.map(([_xVal, yVal], index) => createLine(yVal, index))
+            } else if (yMilestones === "divides") {
+                return yDividesCoords.map((coord, index) => createLine(yDividesValues[index], index, coord))
+            } else if (Array.isArray(yMilestones)) {
+                return yMilestones.map((val, index) => createLine(val, index))
+            }
+
+            return []
+        }, [gridHeight, yMilestones, yOrigin, yDividesCoords, xAxisPxRange, zoomValues, yDividesValues])
+
+        const { referenceLine, setReferenceLine } = useReferenceLine({ xBaseline: xOrigin, width: gridWidth });
+
         const {
             addValueInfoItem,
             removeValueInfoItem,
@@ -88,17 +134,21 @@ export const PointChart = React.memo(
             clearValueInfoItems,
             setAllValueInfoItems,
             valueInfo,
-            isItemActive: isPointActive,
             valueInfoItemsRef,
             activateSelectionRect,
             deactivateSelectionRect,
             onSelectionRectResize,
             selectionRect,
+            activeItems: activePoints,
+            isItemActive: isPointActive,
         } = useValueInfo<PointChartItemInfo>({
-            xBaseline,
+            fontSize,
             divideOffset,
             spacing,
-            fontSize,
+            xPrecision: valueInfoXPrecision,
+            yPrecision: valueInfoYPrecision,
+            infoFontSize: valueInfoFontSize,
+            xBaseline: xOrigin,
             infoCreators: { single: valueInfoCreators.singlePoint, multiple: valueInfoCreators.multiplePoints },
         });
 
@@ -116,7 +166,7 @@ export const PointChart = React.memo(
                 return (
                     <circle
                         key={`c${index}`}
-                        className={`chart__item${isActive ? " chart__item--active" : ""} chart__point`}
+                        className={`chart__item${isActive ? " chart__item--active" : ""} chart__point${isActive ? " chart__point--active" : ""}`}
                         r={pointR}
                         cx={xCoord}
                         cy={yCoord}
@@ -129,7 +179,11 @@ export const PointChart = React.memo(
                             if (e.ctrlKey) {
                                 isActive ? removeValueInfoItem(index) : addValueInfoItem(valueInfoItem);
                             } else {
-                                isActive ? clearValueInfoItems() : replaceValueInfoItems([valueInfoItem]);
+                                if (activePoints.length > 1) {
+                                    replaceValueInfoItems([valueInfoItem])
+                                } else {
+                                    isActive ? clearValueInfoItems() : replaceValueInfoItems([valueInfoItem]);
+                                }
                             }
                         }}
                     />
@@ -144,28 +198,30 @@ export const PointChart = React.memo(
                 addValueInfoItem,
                 clearValueInfoItems,
                 replaceValueInfoItems,
+                activePoints
             ]
         );
 
         const plot = React.useCallback(() => {
             valueInfoItemsRef.current = [];
 
-            return values.map(([xVal, yVal], i) => {
-                const xCoord = xBaseline + gridWidth * (xVal / xMax);
-                const yCoord = yBaseline - gridHeight * (yVal / yMax);
+            return zoomValues.values.map(([xVal, yVal], i) => {
+                const xCoord = getCoord(xOrigin, gridWidth, xVal, zoomValues.xMax)
+                const yCoord = getCoord(yOrigin, -gridHeight, yVal, zoomValues.yMax)
 
                 return createPoint(xCoord, yCoord, xVal, yVal, i);
             });
-        }, [createPoint, gridHeight, gridWidth, valueInfoItemsRef, values, xBaseline, xMax, yBaseline, yMax]);
+        }, [createPoint, gridHeight, gridWidth, valueInfoItemsRef, zoomValues, xOrigin, yOrigin]);
 
         const plotWithConnections = React.useCallback(() => {
             valueInfoItemsRef.current = [];
 
             let els: JSX.Element[] = [];
 
-            for (let i = 0, prevCoords = { x: xBaseline, y: yBaseline }; i < values.length; i++) {
-                const [xVal, yVal] = values[i];
-                const coords = { x: xBaseline + gridWidth * (xVal / xMax), y: yBaseline - gridHeight * (yVal / yMax) };
+            for (let i = 0, prevCoords = { x: xOrigin, y: yOrigin }; i < zoomValues.values.length; i++) {
+                const [xVal, yVal] = zoomValues.values[i];
+
+                const coords = { x: getCoord(xOrigin, gridWidth, xVal, zoomValues.xMax), y: getCoord(yOrigin, gridHeight, yVal, zoomValues.yMax) };
 
                 els.unshift(
                     <line
@@ -185,7 +241,7 @@ export const PointChart = React.memo(
             }
 
             return els;
-        }, [createPoint, gridHeight, gridWidth, valueInfoItemsRef, values, xBaseline, xMax, yBaseline, yMax]);
+        }, [createPoint, gridHeight, gridWidth, valueInfoItemsRef, zoomValues, xOrigin, yOrigin]);
 
         const points = React.useMemo(() => (connectPoints ? plotWithConnections() : plot()), [plot, plotWithConnections, connectPoints]);
 
@@ -199,44 +255,56 @@ export const PointChart = React.memo(
             [setAllValueInfoItems]
         );
 
-        // eslint-disable-next-line react-hooks/exhaustive-deps
         React.useEffect(() => {
             const container = containerRef.current;
 
             if (!container) return;
 
             const newXTextsWidths = getBoundingRects(container.querySelectorAll(".chart__divide-txt--x")).map(({ width }) => Math.round(width));
-            const newYTextsWidths = getBoundingRects(container.querySelectorAll(".chart__divide-txt--y")).map(({ width }) => Math.round(width));
 
             if (!comparePrimitiveArrays(newXTextsWidths, xTextsWidths)) {
                 setXTextsWidths(newXTextsWidths);
             }
+            // eslint-disable-next-line react-hooks/exhaustive-deps
+        }, [xDivides]);
+
+        React.useEffect(() => {
+            const container = containerRef.current;
+
+            if (!container) return;
+
+            const newYTextsWidths = getBoundingRects(container.querySelectorAll(".chart__divide-txt--y")).map(({ width }) => Math.round(width));
 
             if (!comparePrimitiveArrays(newYTextsWidths, yTextsWidths)) {
                 setYTextsWidths(newYTextsWidths);
             }
-        });
+            // eslint-disable-next-line react-hooks/exhaustive-deps
+        }, [yDivides]);
 
         return (
             <svg
+                ref={containerRef as React.LegacyRef<SVGSVGElement>}
                 className="chart point-chart"
                 style={{ outline: "none" }}
-                ref={containerRef as React.LegacyRef<SVGSVGElement>}
                 width={width}
                 height={height}
                 viewBox={`0 0 ${width} ${height}`}
+                tabIndex={-1}
+                xmlns="http://www.w3.org/2000/svg"
                 onClick={clearValueInfoItems}
                 onKeyDown={onKeyDown}
                 onMouseDown={activateSelectionRect}
                 onMouseUp={deactivateSelectionRect}
                 onMouseMove={onSelectionRectResize}
-                tabIndex={-1}
-                xmlns="http://www.w3.org/2000/svg"
+                onWheel={zoom}
             >
-                <circle r={0} cx={xBaseline} cy={yBaseline} />
+                <circle r={0} cx={xOrigin} cy={yOrigin} />
 
-                <line className="chart__axis" x1={xBaseline} y1={yBaseline} x2={width - spacing} y2={yBaseline} />
-                <line className="chart__axis" x1={xBaseline} y1={yBaseline} x2={xBaseline} y2={spacing} />
+                {xMilestoneLines}
+                {yMilestoneLines}
+
+                <line className="chart__axis" x1={xAxisPxRange[0]} x2={xAxisPxRange[1]} y1={yOrigin} y2={yOrigin} />
+                <line className="chart__axis" x1={xOrigin} x2={xOrigin} y1={yAxisPxRange[0]} y2={yAxisPxRange[1]} />
 
                 {xDivides}
                 {yDivides}

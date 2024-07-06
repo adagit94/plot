@@ -1,5 +1,6 @@
 import * as React from "react";
 import { useCallback, useMemo, useState, useRef } from "react";
+import { useSelectionRect } from "./useSelectionRect";
 
 type ItemInfoBase = {
     index: number;
@@ -26,26 +27,23 @@ export type PillarChartItemInfo = ItemInfoBase & {
     };
 };
 
-type ItemInfo = PointChartItemInfo | PillarChartItemInfo;
-
-type SelectionRect = {
-    active: boolean;
-    origin?: { x: number; y: number };
-    rect?: JSX.Element;
-};
+export type ItemInfo = PointChartItemInfo | PillarChartItemInfo;
 
 type UseValueInfoParams<T> = {
     xBaseline: number;
     divideOffset: number;
     spacing: number;
     fontSize: number;
+    infoFontSize: number;
     infoCreators: {
-        single: (item: T, xOffset: number, fontSize: number) => React.ReactNode;
-        multiple: (items: T[], xOffset: number, fontSize: number) => React.ReactNode;
+        single: (item: T, xOffset: number, fontSize: number, xPrecision?: number, yPrecision?: number) => React.ReactNode;
+        multiple: (items: T[], xPrecision: number | undefined, yPrecision: number | undefined, xOffset: number, fontSize: number) => React.ReactNode;
     };
+    xPrecision?: number
+    yPrecision?: number
 };
 
-export const useValueInfo = <T extends ItemInfo>({ xBaseline, divideOffset, spacing, fontSize, infoCreators }: UseValueInfoParams<T>) => {
+export const useValueInfo = <T extends ItemInfo>({ xBaseline, divideOffset, spacing, fontSize, infoFontSize, infoCreators, xPrecision, yPrecision }: UseValueInfoParams<T>) => {
     const [activeItems, setActiveItems] = useState<T[]>([]);
     const itemsRef = useRef<T[]>([]);
 
@@ -57,20 +55,20 @@ export const useValueInfo = <T extends ItemInfo>({ xBaseline, divideOffset, spac
 
         switch (activeItems.length) {
             case 1:
-                txt = infoCreators.single(activeItems[0], xOffset, fontSize);
+                txt = infoCreators.single(activeItems[0], xOffset, fontSize, xPrecision, yPrecision);
                 break;
 
             default:
-                txt = infoCreators.multiple(activeItems, xOffset, fontSize);
+                txt = infoCreators.multiple(activeItems, xPrecision, yPrecision, xOffset, fontSize);
                 break;
         }
 
         return (
-            <text className="chart__value-info" x={xOffset} y={0} dominantBaseline={"hanging"}>
+            <text className="chart__value-info" style={{ "userSelect": "none" }} x={xOffset} y={0} fontSize={infoFontSize} dominantBaseline={"hanging"}>
                 {txt}
             </text>
         );
-    }, [divideOffset, xBaseline, activeItems, infoCreators, spacing, fontSize]);
+    }, [divideOffset, xBaseline, activeItems, infoCreators, spacing, fontSize, infoFontSize, xPrecision, yPrecision]);
 
     const addItem = useCallback((itemInfo: T) => setActiveItems(items => [...items, itemInfo]), []);
     const removeItem = useCallback((itemIndex: number) => setActiveItems(items => items.filter(item => item.index !== itemIndex)), []);
@@ -79,92 +77,19 @@ export const useValueInfo = <T extends ItemInfo>({ xBaseline, divideOffset, spac
     const setAllItems = useCallback(() => setActiveItems(itemsRef.current), []);
     const isItemActive = useCallback((index: number) => activeItems.some(item => item.index === index), [activeItems]);
 
-    const [selectionRect, setSelectionRect] = useState<SelectionRect>({ active: false });
-
-    const activateSelectionRect: React.MouseEventHandler<SVGSVGElement> = useCallback(e => {
-        setSelectionRect({
-            active: true,
-            origin: {
-                x: e.clientX,
-                y: e.clientY,
-            },
-        });
-    }, []);
-
-    const deactivateSelectionRect: React.MouseEventHandler<SVGSVGElement> = useCallback(() => {
-        setSelectionRect({ active: false });
-    }, []);
-
-    const onSelectionRectResize: React.MouseEventHandler<SVGSVGElement> = useCallback(
-        e => {
-            e.preventDefault();
-
-            if (!selectionRect.active || !selectionRect.origin) return;
-
-            const selectionRectHigherX = Math.max(selectionRect.origin.x, e.clientX);
-            const selectionRectLowerX = Math.min(selectionRect.origin.x, e.clientX);
-            const selectionRectHigherY = Math.max(selectionRect.origin.y, e.clientY);
-            const selectionRectLowerY = Math.min(selectionRect.origin.y, e.clientY);
-
-            let itemsInRange: T[] = [];
-
-            for (const item of itemsRef.current) {
-                const { x1, x2, y1, y2 } = item.coords;
-
-                if (
-                    !(
-                        (x1 <= selectionRectLowerX && x2 >= selectionRectHigherX) ||
-                        (x1 >= selectionRectLowerX && x1 <= selectionRectHigherX) ||
-                        (x2 >= selectionRectLowerX && x2 <= selectionRectHigherX)
-                    )
-                ) {
-                    continue;
-                }
-
-                if (
-                    !(
-                        (y1 <= selectionRectLowerY && y2 >= selectionRectHigherY) ||
-                        (y1 >= selectionRectLowerY && y1 <= selectionRectHigherY) ||
-                        (y2 >= selectionRectLowerY && y2 <= selectionRectHigherY)
-                    )
-                ) {
-                    continue;
-                }
-
-                itemsInRange.push(item);
-            }
-
-            setSelectionRect(s => ({
-                ...s,
-                rect: (
-                    <rect
-                        className="chart__selection-rect"
-                        x={selectionRectLowerX}
-                        width={selectionRectHigherX - selectionRectLowerX}
-                        y={selectionRectLowerY}
-                        height={selectionRectHigherY - selectionRectLowerY}
-                        fill="transparent"
-                    />
-                ),
-            }));
-            replaceItems(itemsInRange);
-        },
-        [replaceItems, selectionRect.active, selectionRect.origin]
-    );
+    const selectionRectData  = useSelectionRect({ itemsRef, replaceItems });
 
     return {
+        ...selectionRectData,
+        activeItems,
+        isItemActive,
+        valueInfo,
         addValueInfoItem: addItem,
         removeValueInfoItem: removeItem,
         replaceValueInfoItems: replaceItems,
         clearValueInfoItems: clearItems,
         setAllValueInfoItems: setAllItems,
-        isItemActive,
-        activateSelectionRect,
-        deactivateSelectionRect,
-        onSelectionRectResize,
-        valueInfo,
         valueInfoItemsRef: itemsRef,
-        selectionRect: selectionRect.rect,
     };
 };
 
@@ -193,35 +118,33 @@ const computeValues = (values: number[]): Values => {
 };
 
 export const valueInfoCreators = {
-    singlePoint: (item: PointChartItemInfo, xOffset: number, fontSize: number) => [
-        <tspan x={xOffset} dominantBaseline={"hanging"}>{`x: ${item.values.x}`}</tspan>,
-        <tspan x={xOffset} dy={fontSize} dominantBaseline={"hanging"}>{`y: ${item.values.y}`}</tspan>,
+    singlePoint: (item: PointChartItemInfo, xOffset: number, fontSize: number, xPrecision?: number, yPrecision?: number) => [
+        <tspan key={0} x={xOffset} dominantBaseline={"hanging"}>{`x: ${item.values.x.toFixed(xPrecision)}`}</tspan>,
+        <tspan key={1} x={xOffset} dy={fontSize} dominantBaseline={"hanging"}>{`y: ${item.values.y.toFixed(yPrecision)}`}</tspan>,
     ],
-    multiplePoints: (items: PointChartItemInfo[]) => {
+    multiplePoints: (items: PointChartItemInfo[], xPrecision: number | undefined, yPrecision: number | undefined) => {
         const values = computeValues(items.map(item => item.values.y));
 
-        return `y: Min: ${values.min}, Max: ${values.max}, Avg: ${values.avg}, Sum: ${values.sum}${values.diff !== undefined ? `, diff: ${values.diff}` : ""}`;
+        return `y: Min: ${values.min.toFixed(yPrecision)}, Max: ${values.max.toFixed(yPrecision)}, Avg: ${values.avg.toFixed(yPrecision)}, Sum: ${values.sum.toFixed(yPrecision)}${values.diff !== undefined ? `, diff: ${values.diff}` : ""}`;
     },
-    singleInterval: (item: PillarChartItemInfo, xOffset: number, fontSize: number) => [
-        <tspan x={xOffset} dominantBaseline={"hanging"}>{`x: span: ${item.values.x1} - ${item.values.x2}, length: ${
-            item.values.x2 - item.values.x1
-        }`}</tspan>,
-        <tspan x={xOffset} dy={fontSize} dominantBaseline={"hanging"}>{`y: ${item.values.y}`}</tspan>,
+    singleInterval: (item: PillarChartItemInfo, xOffset: number, fontSize: number, xPrecision?: number, yPrecision?: number) => [
+        <tspan key={0} x={xOffset} dominantBaseline={"hanging"}>{`x: span: ${item.values.x1.toFixed(xPrecision)} - ${item.values.x2.toFixed(xPrecision)}, length: ${(item.values.x2 - item.values.x1).toFixed(xPrecision)
+            }`}</tspan>,
+        <tspan key={1} x={xOffset} dy={fontSize} dominantBaseline={"hanging"}>{`y: ${item.values.y.toFixed(yPrecision)}`}</tspan>,
     ],
-    multipleIntervals: (items: PillarChartItemInfo[], xOffset: number, fontSize: number) => {
+    multipleIntervals: (items: PillarChartItemInfo[], xPrecision: number | undefined, yPrecision: number | undefined, xOffset: number, fontSize: number) => {
         const intervalsLengths = computeValues(items.map(item => item.values.x2 - item.values.x1));
-        const intervalsTxt = `x: Min: ${intervalsLengths.min}, Max: ${intervalsLengths.max}, Avg: ${intervalsLengths.avg}, Sum: ${
-            intervalsLengths.sum
-        }${intervalsLengths.diff !== undefined ? `, diff: ${intervalsLengths.diff}` : ""}`;
+        const intervalsTxt = `x: Min: ${intervalsLengths.min.toFixed(xPrecision)}, Max: ${intervalsLengths.max.toFixed(xPrecision)}, Avg: ${intervalsLengths.avg.toFixed(xPrecision)}, Sum: ${intervalsLengths.sum.toFixed(xPrecision)
+            }${intervalsLengths.diff !== undefined ? `, diff: ${intervalsLengths.diff.toFixed(xPrecision)}` : ""}`;
 
         const values = computeValues(items.map(item => item.values.y));
-        const valuesTxt = `y: Min: ${values.min}, Max: ${values.max}, Avg: ${values.avg}, Sum: ${values.sum}${values.diff !== undefined ? `, diff: ${values.diff}` : ""}`;
+        const valuesTxt = `y: Min: ${values.min.toFixed(yPrecision)}, Max: ${values.max.toFixed(yPrecision)}, Avg: ${values.avg.toFixed(yPrecision)}, Sum: ${values.sum.toFixed(yPrecision)}${values.diff !== undefined ? `, diff: ${values.diff.toFixed(yPrecision)}` : ""}`;
 
         return [
-            <tspan x={xOffset} dominantBaseline={"hanging"}>
+            <tspan key={0} x={xOffset} dominantBaseline={"hanging"}>
                 {intervalsTxt}
             </tspan>,
-            <tspan x={xOffset} dy={fontSize} dominantBaseline={"hanging"}>
+            <tspan key={1} x={xOffset} dy={fontSize} dominantBaseline={"hanging"}>
                 {valuesTxt}
             </tspan>,
         ];
