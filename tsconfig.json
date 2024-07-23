@@ -1,10 +1,11 @@
 {
     "compilerOptions": {
-        "target": "ES2020",
-        "useDefineForClassFields": true,
-        "lib": ["ES2020", "DOM", "DOM.Iterable"],
+        "target": "ESNext",
         "module": "ESNext",
-        "skipLibCheck": true,
+        "moduleResolution": "Bundler",                     /* Specify how TypeScript looks up a file from a given module specifier. */
+        "lib": ["ESNext", "DOM", "DOM.Iterable"],
+        "rootDir": "src",
+        "useDefineForClassFields": true,
         "strictNullChecks": true,
         "noImplicitAny": true,
         "strict": true,
