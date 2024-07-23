@@ -1,105 +1,114 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { AxesValues } from "../components/ChartCommonTypes";
-import { clamp, getIntervalValues } from "../utils";
+import { getIntervalValues } from "../utils";
 
 type ZoomValues = {
   values: AxesValues;
-  xMax: number;
-  yMax: number;
+  minMax: [[number, number], [number, number]];
 };
 
-type UseZoomerSettings = {
-  xStep: number;
-  yStep: number;
-  values: AxesValues;
-  xOffset: number;
-  xAxisBorderline: number;
-  xMax: number;
-  yOffset: number;
-  yAxisBorderline: number;
-  yMax: number;
+type AxisValues = {
+  viewOffset: number;
+  viewMax: number;
+  valueMinMax: [number, number];
 };
 
-function useZoomer({
-  xStep,
-  yStep,
-  values,
-  xOffset,
-  xAxisBorderline,
-  xMax,
-  yOffset,
-  yAxisBorderline,
-  yMax,
-}: UseZoomerSettings) {
-  const [zoomValues, setZoomValues] = useState<ZoomValues>({
-    values: getIntervalValues(values, xMax, yMax),
-    xMax,
-    yMax,
-  });
+export type AxesZoomValues = {
+  x: AxisValues;
+  y: AxisValues;
+};
+
+type UseZoomerParams = {
+  axes: AxesZoomValues;
+  inputValues: AxesValues;
+  scale: number;
+};
+
+function useZoomer({ axes, inputValues, scale }: UseZoomerParams) {
+  const initialZoomValues: ZoomValues = useMemo(
+    () => ({
+      values: getIntervalValues(inputValues, [axes.x.valueMinMax, axes.y.valueMinMax]),
+      minMax: [axes.x.valueMinMax, axes.y.valueMinMax],
+    }),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [inputValues, axes.x.valueMinMax[0], axes.x.valueMinMax[1], axes.y.valueMinMax[0], axes.y.valueMinMax[1]],
+  );
+
+  const [zoomValues, setZoomValues] = useState<ZoomValues>(initialZoomValues);
 
   const zoom: React.WheelEventHandler<SVGSVGElement> = useCallback(
     (e) => {
       const zoomVec = e.deltaY < 0 ? 1 : -1;
-
-      const { max: newXMax } = computeZoomValues(
-        "x",
-        xStep,
-        e.nativeEvent.offsetX,
-        xOffset,
-        xAxisBorderline,
-        zoomValues.xMax,
-        xMax,
-        zoomVec,
-      );
-
-      const { max: newYMax } = computeZoomValues(
-        "y",
-        yStep,
-        e.nativeEvent.offsetY,
-        yOffset,
-        yAxisBorderline,
-        zoomValues.yMax,
-        yMax,
-        zoomVec,
-      );
-
-      const newZoomValues = getIntervalValues(values, newXMax, newYMax);
+      const newMinMax: [[number, number], [number, number]] = [
+        computeZoomValues(
+          "x",
+          zoomVec,
+          axes.x.viewOffset,
+          axes.x.viewMax,
+          e.nativeEvent.offsetX,
+          scale,
+          zoomValues.minMax[0],
+          initialZoomValues.minMax[0],
+        ),
+        computeZoomValues(
+          "y",
+          zoomVec,
+          axes.y.viewOffset,
+          axes.y.viewMax,
+          e.nativeEvent.offsetY,
+          scale,
+          zoomValues.minMax[1],
+          initialZoomValues.minMax[1],
+        ),
+      ];
 
       setZoomValues({
-        values: newZoomValues,
-        xMax: newXMax,
-        yMax: newYMax,
+        values: getIntervalValues(inputValues, newMinMax),
+        minMax: newMinMax,
       });
     },
-    [xStep, yStep, xMax, yMax, values, xOffset, xAxisBorderline, yOffset, yAxisBorderline, zoomValues],
+    [axes, scale, zoomValues, initialZoomValues, inputValues],
   );
 
   useEffect(() => {
-    setZoomValues({ values: getIntervalValues(values, xMax, yMax), xMax, yMax });
-  }, [values, xMax, yMax]);
+    setZoomValues(initialZoomValues);
+  }, [initialZoomValues]);
 
   return { zoom, zoomValues };
 }
 
 const computeZoomValues = (
   axis: "x" | "y",
-  step: number,
+  zoomVec: 1 | -1,
+  viewOffset: number,
+  viewMax: number,
   cursorPos: number,
-  offset: number,
-  axisBorderline: number,
-  prevMax: number,
-  initialMax: number,
-  zoomVec: -1 | 1,
-) => {
-  const axisPos = clamp(cursorPos - offset, 0, axisBorderline);
-  const axisPercPos = axisPos / axisBorderline;
-  const maxScale = axis === "x" ? 1 - axisPercPos : axisPercPos;
-  const stepLength = step * maxScale;
-  const newMax = prevMax - stepLength * zoomVec;
+  scale: number,
+  minMax: [number, number],
+  initialMinMax: [number, number],
+): [number, number] => {
+  const valueInterval = minMax[1] - minMax[0];
+  const cursorRatioPos = (cursorPos - viewOffset) / (viewMax - viewOffset);
+  const valueIntervalPos = axis === "x" ? valueInterval * cursorRatioPos : valueInterval * (1 - cursorRatioPos);
+  const minMaxLimit = minMax[0] + valueIntervalPos;
+  const newMinMax: [number, number] = [
+    minMax[0] + valueIntervalPos * (1 - 1 / scale) * zoomVec,
+    minMax[1] - (valueInterval - valueIntervalPos) * (1 - 1 / scale) * zoomVec,
+  ];
 
-  return {
-    max: clamp(newMax, 0, initialMax),
-  };
+  if (newMinMax[0] >= minMaxLimit) {
+    newMinMax[0] = minMax[0];
+  } else if (newMinMax[0] < initialMinMax[0]) {
+    newMinMax[0] = initialMinMax[0];
+  }
+
+  if (newMinMax[1] <= minMaxLimit) {
+    newMinMax[1] = minMax[1];
+  } else if (newMinMax[1] > initialMinMax[1]) {
+    newMinMax[1] = initialMinMax[1];
+  }
+
+  return newMinMax;
 };
 
 export default useZoomer;

@@ -10,7 +10,7 @@ type CreateDividesBase = {
     spacing: number;
     fontSize: number;
     divideOffset: number;
-    precision?: number;
+    precision: number;
 };
 
 export const createXDivides = ({
@@ -35,8 +35,8 @@ export const createXDivides = ({
     const verticalDivideY1 = yOrigin + divideOffset;
     const verticalDivideY2 = yOrigin - divideOffset;
 
-    for (let i = 0, xOffset = xOrigin + step, value = valueRange[0] + valueStep; i < steps; i++, xOffset += step, value += valueStep) {
-        const displayValue = Number(value).toFixed(precision ?? 0);
+    for (let i = 0, xOffset = xOrigin, value = valueRange[0]; i <= steps; i++, xOffset += step, value += valueStep) {
+        const displayValue = Number(value).toFixed(precision);
 
         const line = <line key={`lx${i}`} className="chart__divide" x1={xOffset} y1={verticalDivideY1} x2={xOffset} y2={verticalDivideY2} />;
         const txt = (
@@ -83,8 +83,8 @@ export const createYDivides = ({
     const horizontalDivideX1 = xOrigin - divideOffset;
     const horizontalDivideX2 = xOrigin + divideOffset;
 
-    for (let i = 0, yOffset = yOrigin - step, value = valueRange[0] + valueStep; i < steps; i++, yOffset -= step, value += valueStep) {
-        const displayValue = Number(value).toFixed(precision ?? 0);
+    for (let i = 0, yOffset = yOrigin, value = valueRange[0]; i <= steps; i++, yOffset -= step, value += valueStep) {
+        const displayValue = Number(value).toFixed(precision);
 
         const line = <line key={`ly${i}`} className="chart__divide" x1={horizontalDivideX1} y1={yOffset} x2={horizontalDivideX2} y2={yOffset} />;
         const txt = (
@@ -109,13 +109,9 @@ export const createYDivides = ({
     return [els, values, coords];
 };
 
-type CreateMilestoneLineParams = { axis: "x" | "y", origin: number, length: number, coords: Partial<{ x1: number, x2: number, y1: number, y2: number }>, val: number, min: number, max: number, index: number; coord?: number }
+type CreateMilestoneLineParams = { axis: "x" | "y", origin: number, length: number, coords: Partial<{ x1: number, x2: number, y1: number, y2: number }>, val: number, max: number, index: number; coord?: number }
 
-export const createMilestoneLine = ({ axis, origin, length, coord, coords, val, min, max, index }: CreateMilestoneLineParams) => {
-    if (Number(val.toFixed(3)) <= Number(min.toFixed(3)) || Number(val.toFixed(3)) > Number(max.toFixed(3))) {
-        return null
-    }
-
+export const createMilestoneLine = ({ axis, origin, length, coord, coords, val, max, index }: CreateMilestoneLineParams) => {
     coord = coord ?? getCoord(origin, length, val, max)
 
     coords = { ...coords }
@@ -145,6 +141,8 @@ export const getCoord = (origin: number, length: number, value: number, maxValue
 
 export const flipY = (coord: number, height: number) => height - coord
 
-export const getIntervalValues = (values: AxesValues, xMax: number, yMax: number) => values.filter(([x, y]) => x >= 0 && x <= xMax && y >= 0 && y <= yMax)
+export const getIntervalValues = (values: AxesValues, minMax: [[number, number], [number, number]]) => values.filter(([x, y]) => x >= minMax[0][0] && x <= minMax[0][1] && y >= minMax[1][0] && y <= minMax[1][1])
 
 export const clamp = (value: number, min: number, max: number) => Math.min(Math.max(value, min), max)
+
+export const percentageOffset = (a: number, b: number) => (a / b) * 100 - 100

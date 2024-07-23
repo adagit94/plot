@@ -16,8 +16,7 @@ export type ChartProps = {
     spacing: number;
     fontSize: number;
     valueInfoFontSize: number;
-    zoomXStep: number
-    zoomYStep: number
+    zoomScale: number
     xPrecision?: number;
     yPrecision?: number;
     valueInfoXPrecision?: number;
