@@ -7,6 +7,9 @@ import useZoomer from "../../hooks/useZoomer";
 
 type PointChartProps = ChartProps & {
     pointR: number;
+    interpolatedPointR: number;
+    interpolatedPointAxis: number;
+    interpolatedPointAxisValue: number;
     values: AxesValues; // [x, y]; values themself, not coordinates
     connectPoints?: boolean;
 };
@@ -33,6 +36,9 @@ export const PointChart = React.memo(
         zoomYStep,
         xMaxValue,
         yMaxValue,
+        interpolatedPointR,
+        interpolatedPointAxis,
+        interpolatedPointAxisValue,
         pointR: basePointR,
     }: PointChartProps) => {
         const [xTextsWidths, setXTextsWidths] = React.useState<number[]>([]);
