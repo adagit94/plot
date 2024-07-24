@@ -4,14 +4,15 @@ import { useReferenceLine } from "../../hooks/useReferenceLine";
 import { PointChartItemInfo, useValueInfo, valueInfoCreators } from "../../hooks/useValueInfo";
 import { comparePrimitiveArrays, createMilestoneLine, createXDivides, createYDivides, getBoundingRects, getCoord } from "../../utils";
 import useZoomer from "../../hooks/useZoomer";
+import { getInterpolatedValue } from "curve-ts";
+
+type InterpolationSettings = { axis: "x" | "y"; value: number; values: [number, number][], pointR: number }
 
 type PointChartProps = ChartProps & {
     pointR: number;
-    interpolatedPointR: number;
-    interpolatedPointAxis: number;
-    interpolatedPointAxisValue: number;
     values: AxesValues; // [x, y]; values themself, not coordinates
     connectPoints?: boolean;
+    interpolation?: InterpolationSettings
 };
 
 export const PointChart = React.memo(
@@ -36,15 +37,13 @@ export const PointChart = React.memo(
         zoomYStep,
         xMaxValue,
         yMaxValue,
-        interpolatedPointR,
-        interpolatedPointAxis,
-        interpolatedPointAxisValue,
+        interpolation,
         pointR: basePointR,
     }: PointChartProps) => {
+        const containerRef = React.useRef<SVGElement>();
+
         const [xTextsWidths, setXTextsWidths] = React.useState<number[]>([]);
         const [yTextsWidths, setYTextsWidths] = React.useState<number[]>([]);
-
-        const containerRef = React.useRef<SVGElement>();
 
         const xMax = React.useMemo(() => xMaxValue ?? Math.max(...values.map(([x]) => x)), [values, xMaxValue]);
         const yMax = React.useMemo(() => yMaxValue ?? Math.max(...values.map(([_x, y]) => y)), [values, yMaxValue]);
@@ -64,11 +63,17 @@ export const PointChart = React.memo(
         const xAxisPxRange: [number, number] = React.useMemo(() => [xOrigin, xOrigin + gridWidth], [xOrigin, gridWidth])
         const yAxisPxRange: [number, number] = React.useMemo(() => [yOrigin, yOrigin - gridHeight], [yOrigin, gridHeight])
 
+
+
         const { zoom, zoomValues } = useZoomer({ values, xOffset, xAxisBorderline: xAxisPxRange[1], xMax, yOffset: yTopOffset, yAxisBorderline: yOrigin, yMax, xStep: zoomXStep, yStep: zoomYStep })
+        const interpolatedValue = React.useMemo(() => interpolation?.axis && interpolation?.value !== undefined && values ? getInterpolatedValue(interpolation.axis, interpolation.value, values) : undefined, [interpolation?.axis, interpolation?.value, values]);
 
         const pointRScale = (zoomValues.xMax / xMax + zoomValues.yMax / yMax) / 2
         const pointR = basePointR / pointRScale
+        const interpolatedPointR = (interpolation?.pointR ?? 0) / pointRScale
 
+        const interpolatedPoint = interpolatedValue !== undefined && interpolation?.value !== undefined ? <circle className="chart__interpolated-point" r={interpolatedPointR} cx={interpolation?.axis === "x" ? getCoord(xOrigin, width, interpolation?.value, xMax) : getCoord(xOrigin, width, interpolatedValue, xMax)} cy={interpolation?.axis === "x" ? getCoord(yOrigin, height, interpolatedValue, yMax) : getCoord(yOrigin, height, interpolation?.value, yMax)} /> : undefined
+        
         const [xDivides, xDividesValues, xDividesCoords] = React.useMemo(
             () =>
                 createXDivides({
@@ -318,6 +323,8 @@ export const PointChart = React.memo(
                 {referenceLine}
 
                 {points}
+
+                {interpolatedPoint}
 
                 {selectionRect}
 
