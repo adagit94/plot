@@ -6,7 +6,12 @@ import { comparePrimitiveArrays, createMilestoneLine, createXDivides, createYDiv
 import useZoomer from "../../hooks/useZoomer";
 import { getInterpolatedValue } from "curve-ts";
 
-type InterpolationSettings = { axis: "x" | "y"; value: number; values: [number, number][], pointR: number }
+enum PointType {
+    Data,
+    Interpolated
+}
+
+type InterpolationSettings = { axis: "x" | "y"; value: number, pointR: number }
 
 type PointChartProps = ChartProps & {
     pointR: number;
@@ -63,17 +68,13 @@ export const PointChart = React.memo(
         const xAxisPxRange: [number, number] = React.useMemo(() => [xOrigin, xOrigin + gridWidth], [xOrigin, gridWidth])
         const yAxisPxRange: [number, number] = React.useMemo(() => [yOrigin, yOrigin - gridHeight], [yOrigin, gridHeight])
 
-
-
         const { zoom, zoomValues } = useZoomer({ values, xOffset, xAxisBorderline: xAxisPxRange[1], xMax, yOffset: yTopOffset, yAxisBorderline: yOrigin, yMax, xStep: zoomXStep, yStep: zoomYStep })
-        const interpolatedValue = React.useMemo(() => interpolation?.axis && interpolation?.value !== undefined && values ? getInterpolatedValue(interpolation.axis, interpolation.value, values) : undefined, [interpolation?.axis, interpolation?.value, values]);
+        const interpolatedValue = React.useMemo(() => interpolation?.axis && interpolation?.value !== undefined ? getInterpolatedValue(interpolation.axis, interpolation.value, zoomValues.values) : undefined, [interpolation?.axis, interpolation?.value, zoomValues.values]);
 
         const pointRScale = (zoomValues.xMax / xMax + zoomValues.yMax / yMax) / 2
         const pointR = basePointR / pointRScale
         const interpolatedPointR = (interpolation?.pointR ?? 0) / pointRScale
 
-        const interpolatedPoint = interpolatedValue !== undefined && interpolation?.value !== undefined ? <circle className="chart__interpolated-point" r={interpolatedPointR} cx={interpolation?.axis === "x" ? getCoord(xOrigin, width, interpolation?.value, xMax) : getCoord(xOrigin, width, interpolatedValue, xMax)} cy={interpolation?.axis === "x" ? getCoord(yOrigin, height, interpolatedValue, yMax) : getCoord(yOrigin, height, interpolation?.value, yMax)} /> : undefined
-        
         const [xDivides, xDividesValues, xDividesCoords] = React.useMemo(
             () =>
                 createXDivides({
@@ -164,10 +165,11 @@ export const PointChart = React.memo(
         });
 
         const createPoint = React.useCallback(
-            (xCoord: number, yCoord: number, xVal: number, yVal: number, index: number) => {
+            (xCoord: number, yCoord: number, xVal: number, yVal: number, index: number, type = PointType.Data) => {
+                const r = type === PointType.Data ? pointR : interpolatedPointR
                 const valueInfoItem: PointChartItemInfo = {
                     index,
-                    coords: { x1: xCoord - pointR, x2: xCoord + pointR, y1: yCoord - pointR, y2: yCoord + pointR },
+                    coords: { x1: xCoord - r, x2: xCoord + r, y1: yCoord - r, y2: yCoord + r },
                     values: { x: xVal, y: yVal },
                 };
                 const isActive = isPointActive(index);
@@ -177,8 +179,8 @@ export const PointChart = React.memo(
                 return (
                     <circle
                         key={`c${index}`}
-                        className={`chart__item${isActive ? " chart__item--active" : ""} chart__point${isActive ? " chart__point--active" : ""}`}
-                        r={pointR}
+                        className={`chart__item${isActive ? " chart__item--active" : ""} chart__point${isActive ? " chart__point--active" : ""}${type === PointType.Interpolated ? " chart__interpolated-point" : ""}`}
+                        r={r}
                         cx={xCoord}
                         cy={yCoord}
                         shapeRendering={"geometricPrecision"}
@@ -204,6 +206,7 @@ export const PointChart = React.memo(
                 isPointActive,
                 valueInfoItemsRef,
                 pointR,
+                interpolatedPointR,
                 setReferenceLine,
                 removeValueInfoItem,
                 addValueInfoItem,
@@ -232,7 +235,7 @@ export const PointChart = React.memo(
             for (let i = 0, prevCoords = { x: xOrigin, y: yOrigin }; i < zoomValues.values.length; i++) {
                 const [xVal, yVal] = zoomValues.values[i];
 
-                const coords = { x: getCoord(xOrigin, gridWidth, xVal, zoomValues.xMax), y: getCoord(yOrigin, gridHeight, yVal, zoomValues.yMax) };
+                const coords = { x: getCoord(xOrigin, gridWidth, xVal, zoomValues.xMax), y: getCoord(yOrigin, -gridHeight, yVal, zoomValues.yMax) };
 
                 els.unshift(
                     <line
@@ -254,7 +257,17 @@ export const PointChart = React.memo(
             return els;
         }, [createPoint, gridHeight, gridWidth, valueInfoItemsRef, zoomValues, xOrigin, yOrigin]);
 
-        const points = React.useMemo(() => (connectPoints ? plotWithConnections() : plot()), [plot, plotWithConnections, connectPoints]);
+        const points = React.useMemo(() => {
+            let points = connectPoints ? plotWithConnections() : plot()
+
+            if (interpolatedValue !== undefined && interpolation?.value !== undefined) {
+                const interpolatedPoint = createPoint(interpolation?.axis === "x" ? getCoord(xOrigin, gridWidth, interpolation.value, zoomValues.xMax) : getCoord(xOrigin, gridWidth, interpolatedValue, zoomValues.xMax), interpolation?.axis === "x" ? getCoord(yOrigin, -gridHeight, interpolatedValue, zoomValues.yMax) : getCoord(yOrigin, -gridHeight, interpolation.value, zoomValues.yMax), interpolation?.axis === "x" ? interpolation.value : interpolatedValue, interpolation?.axis === "x" ? interpolatedValue : interpolation.value, points.length, PointType.Interpolated)
+
+                points.push(interpolatedPoint)
+            }
+
+            return points
+        }, [connectPoints, plotWithConnections, plot, interpolatedValue, interpolation?.value, interpolation?.axis, createPoint, xOrigin, gridWidth, zoomValues.xMax, yOrigin, gridHeight, zoomValues.yMax]);
 
         const onKeyDown: React.KeyboardEventHandler<SVGSVGElement> = React.useCallback(
             e => {
@@ -323,8 +336,6 @@ export const PointChart = React.memo(
                 {referenceLine}
 
                 {points}
-
-                {interpolatedPoint}
 
                 {selectionRect}
 
