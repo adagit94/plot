@@ -148,3 +148,5 @@ export const flipY = (coord: number, height: number) => height - coord
 export const getIntervalValues = (values: AxesValues, xMax: number, yMax: number) => values.filter(([x, y]) => x >= 0 && x <= xMax && y >= 0 && y <= yMax)
 
 export const clamp = (value: number, min: number, max: number) => Math.min(Math.max(value, min), max)
+
+export const percentageOffset = (a: number, b: number) => (a / b) * 100 - 100
