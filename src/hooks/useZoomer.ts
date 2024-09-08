@@ -3,7 +3,7 @@ import { AxesValues } from "../components/ChartCommonTypes";
 import { getIntervalValues } from "../utils";
 
 type ZoomValues = {
-  values: AxesValues;
+  values: AxesValues[];
   minMax: [[number, number], [number, number]];
 };
 
@@ -20,14 +20,14 @@ export type AxesZoomValues = {
 
 type UseZoomerParams = {
   axes: AxesZoomValues;
-  inputValues: AxesValues;
+  inputValues: AxesValues[];
   scale: number;
 };
 
 function useZoomer({ axes, inputValues, scale }: UseZoomerParams) {
   const initialZoomValues: ZoomValues = useMemo(
     () => ({
-      values: getIntervalValues(inputValues, [axes.x.valueMinMax, axes.y.valueMinMax]),
+      values: inputValues.map(values => getIntervalValues(values, [axes.x.valueMinMax, axes.y.valueMinMax])),
       minMax: [axes.x.valueMinMax, axes.y.valueMinMax],
     }),
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -63,7 +63,7 @@ function useZoomer({ axes, inputValues, scale }: UseZoomerParams) {
       ];
 
       setZoomValues({
-        values: getIntervalValues(inputValues, newMinMax),
+        values: inputValues.map(values => getIntervalValues(values, [axes.x.valueMinMax, axes.y.valueMinMax])),
         minMax: newMinMax,
       });
     },

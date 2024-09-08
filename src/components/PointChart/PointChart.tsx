@@ -16,7 +16,7 @@ export type InterpolationSettings = { axis: "x" | "y"; value: number | ((params:
 
 export type PointChartProps = ChartProps & {
     pointR: number;
-    values: AxesValues; // [x, y]; values themself, not coordinates
+    values: AxesValues[]; // [x, y]; values themself, not coordinates
     connectPoints?: boolean;
     interpolation?: InterpolationSettings
 };
@@ -50,8 +50,8 @@ export const PointChart = React.memo(
         const [xTextsWidths, setXTextsWidths] = React.useState<number[]>([]);
         const [yTextsWidths, setYTextsWidths] = React.useState<number[]>([]);
 
-        const xMax = React.useMemo(() => xMaxValue ?? Math.max(...values.map(([x]) => x)), [values, xMaxValue]);
-        const yMax = React.useMemo(() => yMaxValue ?? Math.max(...values.map(([_x, y]) => y)), [values, yMaxValue]);
+        const xMax = React.useMemo(() => xMaxValue ?? Math.max(...values.flatMap((coords) => coords.map(([x]) => x))), [values, xMaxValue]);
+        const yMax = React.useMemo(() => yMaxValue ?? Math.max(...values.flatMap((coords) => coords.map(([_x, y]) => y))), [values, yMaxValue]);
 
         const divideOffset = divideLength / 2;
 
@@ -106,7 +106,7 @@ export const PointChart = React.memo(
         React.useEffect(() => {
             if (interpolation === undefined || typeof interpolation.value === "number") {
                 const state = framerRef.current.getState()
-    
+
                 state === FramerState.On && framerRef.current.setState(FramerState.Off)
                 setInterpolationValues(handleInterpolationRef.current())
             } else if (interpolation && typeof interpolation.value === "function") {
