@@ -12,7 +12,7 @@ enum PointType {
     Interpolated
 }
 
-export type InterpolationSettings = { axis: "x" | "y"; value: number | ((params: Parameters<Renderer>[0]) => number), pointR: number }
+export type InterpolationSettings = { axis: "x" | "y"; value: number | ((params: Parameters<Renderer>[0]) => number), pointR: number, curvesIndices?: number[] }
 
 export type PointChartProps = ChartProps & {
     pointR: number;
@@ -81,7 +81,7 @@ export const PointChart = React.memo(
         const handleInterpolationRef = React.useRef((params?: Parameters<Renderer>[0]) => {
             if (interpolation) {
                 const interpolationValue = typeof interpolation.value === "number" ? interpolation.value : params && interpolation.value(params)
-                const interpolatedValues = interpolationValue !== undefined ? zoomValues.values.map((curveValues) => getInterpolatedValue(interpolation.axis, interpolationValue, curveValues)) : undefined
+                const interpolatedValues = interpolationValue !== undefined ? zoomValues.values.map((curveValues, i) => interpolation?.curvesIndices === undefined || interpolation.curvesIndices.includes(i) ? getInterpolatedValue(interpolation.axis, interpolationValue, curveValues) : undefined) : undefined
 
                 return {
                     interpolationValue,
@@ -306,8 +306,8 @@ export const PointChart = React.memo(
 
         const interpolatedPoints = React.useMemo(() => {
             if (interpolation && interpolationValues?.interpolatedValues !== undefined && interpolationValues?.interpolationValue !== undefined) {
-                return interpolationValues?.interpolatedValues.map(interpolatedValue => {
-                    if (interpolationValues?.interpolationValue !== undefined && interpolatedValue !== undefined) {
+                return interpolationValues.interpolatedValues.map(interpolatedValue => {
+                    if (interpolationValues.interpolationValue !== undefined && interpolatedValue !== undefined) {
                         const xInterpolationValue = interpolation.axis === "x" ? interpolationValues.interpolationValue : interpolatedValue
                         const yInterpolationValue = interpolation.axis === "y" ? interpolationValues.interpolationValue : interpolatedValue
 
