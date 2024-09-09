@@ -81,11 +81,11 @@ export const PointChart = React.memo(
         const handleInterpolationRef = React.useRef((params?: Parameters<Renderer>[0]) => {
             if (interpolation) {
                 const interpolationValue = typeof interpolation.value === "number" ? interpolation.value : params && interpolation.value(params)
-                const interpolatedValue = interpolationValue !== undefined ? getInterpolatedValue(interpolation.axis, interpolationValue, zoomValues.values) : undefined
+                const interpolatedValues = interpolationValue !== undefined ? zoomValues.values.map((curveValues) => getInterpolatedValue(interpolation.axis, interpolationValue, curveValues)) : undefined
 
                 return {
                     interpolationValue,
-                    interpolatedValue
+                    interpolatedValues
                 }
             }
 
@@ -94,7 +94,7 @@ export const PointChart = React.memo(
 
         const [interpolationValues, setInterpolationValues] = React.useState<Partial<{
             interpolationValue: number,
-            interpolatedValue: number
+            interpolatedValues: (number | undefined)[]
         }> | undefined>()
 
         const framerRef = React.useRef(createFramer({
@@ -155,7 +155,7 @@ export const PointChart = React.memo(
             const createLine = (val: number, index: number, coord?: number) => createMilestoneLine({ val: val, index, axis: "x", origin: xOrigin, length: gridWidth, coords: { y1: yAxisPxRange[0], y2: yAxisPxRange[1] }, max: zoomValues.minMax[0][1], coord })
 
             if (xMilestones === "values") {
-                return zoomValues.values.map(([xVal], index) => createMilestoneLine({ val: xVal - zoomValues.minMax[0][0], index, axis: "x", origin: xOrigin, length: gridWidth, coords: { y1: yAxisPxRange[0], y2: yAxisPxRange[1] }, max: zoomValues.minMax[0][1] - zoomValues.minMax[0][0] }))
+                return zoomValues.values.flat().map(([xVal], index) => createMilestoneLine({ val: xVal - zoomValues.minMax[0][0], index, axis: "x", origin: xOrigin, length: gridWidth, coords: { y1: yAxisPxRange[0], y2: yAxisPxRange[1] }, max: zoomValues.minMax[0][1] - zoomValues.minMax[0][0] }))
             } else if (xMilestones === "divides") {
                 return xDividesCoords.map((coord, index) => createLine(xDividesValues[index], index, coord))
             } else if (Array.isArray(xMilestones)) {
@@ -169,7 +169,7 @@ export const PointChart = React.memo(
             const createLine = (val: number, index: number, coord?: number) => createMilestoneLine({ val: val, index, axis: "y", origin: yOrigin, length: -gridHeight, coords: { x1: xAxisPxRange[0], x2: xAxisPxRange[1] }, max: zoomValues.minMax[1][1], coord })
 
             if (yMilestones === "values") {
-                return zoomValues.values.map(([_xVal, yVal], index) => createMilestoneLine({ val: yVal - zoomValues.minMax[1][0], index, axis: "y", origin: yOrigin, length: -gridHeight, coords: { x1: xAxisPxRange[0], x2: xAxisPxRange[1] }, max: zoomValues.minMax[1][1] - zoomValues.minMax[1][0] }))
+                return zoomValues.values.flat().map(([_xVal, yVal], index) => createMilestoneLine({ val: yVal - zoomValues.minMax[1][0], index, axis: "y", origin: yOrigin, length: -gridHeight, coords: { x1: xAxisPxRange[0], x2: xAxisPxRange[1] }, max: zoomValues.minMax[1][1] - zoomValues.minMax[1][0] }))
             } else if (yMilestones === "divides") {
                 return yDividesCoords.map((coord, index) => createLine(yDividesValues[index], index, coord))
             } else if (Array.isArray(yMilestones)) {
@@ -261,12 +261,12 @@ export const PointChart = React.memo(
         const plot = React.useCallback(() => {
             valueInfoItemsRef.current = [];
 
-            return zoomValues.values.map(([xVal, yVal], i) => {
+            return zoomValues.values.map(curveValues => curveValues.map(([xVal, yVal], i) => {
                 const xCoord = getCoord(xOrigin, gridWidth, xVal - zoomValues.minMax[0][0], zoomValues.minMax[0][1] - zoomValues.minMax[0][0])
                 const yCoord = getCoord(yOrigin, -gridHeight, yVal - zoomValues.minMax[1][0], zoomValues.minMax[1][1] - zoomValues.minMax[1][0])
 
                 return createPoint(xCoord, yCoord, xVal, yVal, i);
-            });
+            }));
         }, [createPoint, gridHeight, gridWidth, valueInfoItemsRef, zoomValues, xOrigin, yOrigin]);
 
         const plotWithConnections = React.useCallback(() => {
@@ -274,25 +274,27 @@ export const PointChart = React.memo(
 
             let els: JSX.Element[] = [];
 
-            for (let i = 0, prevCoords = { x: xOrigin, y: yOrigin }; i < zoomValues.values.length; i++) {
-                const [xVal, yVal] = zoomValues.values[i];
-                const coords = { x: getCoord(xOrigin, gridWidth, xVal - zoomValues.minMax[0][0], zoomValues.minMax[0][1] - zoomValues.minMax[0][0]), y: getCoord(yOrigin, -gridHeight, yVal - zoomValues.minMax[1][0], zoomValues.minMax[1][1] - zoomValues.minMax[1][0]) };
+            for (let i = 0; i < zoomValues.values.length; i++) {
+                for (let j = 0, prevCoords = { x: xOrigin, y: yOrigin }; j < zoomValues.values[i].length; j++) {
+                    const [xVal, yVal] = zoomValues.values[i][j];
+                    const coords = { x: getCoord(xOrigin, gridWidth, xVal - zoomValues.minMax[0][0], zoomValues.minMax[0][1] - zoomValues.minMax[0][0]), y: getCoord(yOrigin, -gridHeight, yVal - zoomValues.minMax[1][0], zoomValues.minMax[1][1] - zoomValues.minMax[1][0]) };
 
-                els.unshift(
-                    <line
-                        key={`pl${i}`}
-                        className="chart__connection-line"
-                        x1={prevCoords.x}
-                        y1={prevCoords.y}
-                        x2={coords.x}
-                        y2={coords.y}
-                        shapeRendering={"geometricPrecision"}
-                    />
-                );
+                    els.unshift(
+                        <line
+                            key={`pl${j}`}
+                            className="chart__connection-line"
+                            x1={prevCoords.x}
+                            y1={prevCoords.y}
+                            x2={coords.x}
+                            y2={coords.y}
+                            shapeRendering={"geometricPrecision"}
+                        />
+                    );
 
-                els.push(createPoint(coords.x, coords.y, xVal, yVal, i));
+                    els.push(createPoint(coords.x, coords.y, xVal, yVal, j));
 
-                prevCoords = coords;
+                    prevCoords = coords;
+                }
             }
 
             return els;
@@ -302,19 +304,24 @@ export const PointChart = React.memo(
             return connectPoints ? plotWithConnections() : plot()
         }, [connectPoints, plotWithConnections, plot]);
 
-        const interpolatedPoint = React.useMemo(() => {
-            if (interpolation && interpolationValues?.interpolatedValue !== undefined && interpolationValues?.interpolationValue !== undefined) {
-                const xInterpolationValue = interpolation.axis === "x" ? interpolationValues.interpolationValue : interpolationValues.interpolatedValue
-                const yInterpolationValue = interpolation.axis === "y" ? interpolationValues.interpolationValue : interpolationValues.interpolatedValue
+        const interpolatedPoints = React.useMemo(() => {
+            if (interpolation && interpolationValues?.interpolatedValues !== undefined && interpolationValues?.interpolationValue !== undefined) {
+                return interpolationValues?.interpolatedValues.map(interpolatedValue => {
+                    if (interpolationValues?.interpolationValue !== undefined && interpolatedValue !== undefined) {
+                        const xInterpolationValue = interpolation.axis === "x" ? interpolationValues.interpolationValue : interpolatedValue
+                        const yInterpolationValue = interpolation.axis === "y" ? interpolationValues.interpolationValue : interpolatedValue
 
-                const xCoord = getCoord(xOrigin, gridWidth, xInterpolationValue - zoomValues.minMax[0][0], zoomValues.minMax[0][1] - zoomValues.minMax[0][0])
-                const yCoord = getCoord(yOrigin, -gridHeight, yInterpolationValue - zoomValues.minMax[1][0], zoomValues.minMax[1][1] - zoomValues.minMax[1][0])
+                        const xCoord = getCoord(xOrigin, gridWidth, xInterpolationValue - zoomValues.minMax[0][0], zoomValues.minMax[0][1] - zoomValues.minMax[0][0])
+                        const yCoord = getCoord(yOrigin, -gridHeight, yInterpolationValue - zoomValues.minMax[1][0], zoomValues.minMax[1][1] - zoomValues.minMax[1][0])
 
-                const interpolatedPoint = createPoint(xCoord, yCoord, xInterpolationValue, yInterpolationValue, points.length, PointType.Interpolated)
+                        const interpolatedPoint = createPoint(xCoord, yCoord, xInterpolationValue, yInterpolationValue, points.length, PointType.Interpolated)
 
-                return interpolatedPoint
+                        return interpolatedPoint
+                    }
+                })
+
             }
-        }, [interpolationValues?.interpolatedValue, interpolationValues?.interpolationValue, createPoint, xOrigin, gridWidth, yOrigin, gridHeight, zoomValues, interpolation, points.length]);
+        }, [interpolationValues?.interpolatedValues, interpolationValues?.interpolationValue, createPoint, xOrigin, gridWidth, yOrigin, gridHeight, zoomValues, interpolation, points.length]);
 
         const onKeyDown: React.KeyboardEventHandler<SVGSVGElement> = React.useCallback(
             e => {
@@ -381,7 +388,7 @@ export const PointChart = React.memo(
                 {referenceLine}
 
                 {points}
-                {interpolatedPoint}
+                {interpolatedPoints}
 
                 {selectionRect}
 
