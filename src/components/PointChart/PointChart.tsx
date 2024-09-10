@@ -12,7 +12,7 @@ enum PointType {
     Interpolated
 }
 
-export type InterpolationSettings = { axis: "x" | "y"; value: number | ((params: Parameters<Renderer>[0]) => number), pointR: number, curvesIndices?: number[] }
+export type InterpolationSettings = { axis: "x" | "y"; value: number | ((params: Parameters<Renderer>[0]) => number | (number | undefined)[]), pointR: number }
 
 export type PointChartProps = ChartProps & {
     pointR: number;
@@ -80,11 +80,15 @@ export const PointChart = React.memo(
 
         const handleInterpolationRef = React.useRef((params?: Parameters<Renderer>[0]) => {
             if (interpolation) {
-                const interpolationValue = typeof interpolation.value === "number" ? interpolation.value : params && interpolation.value(params)
-                const interpolatedValues = interpolationValue !== undefined ? zoomValues.values.map((curveValues, i) => interpolation?.curvesIndices === undefined || interpolation.curvesIndices.includes(i) ? getInterpolatedValue(interpolation.axis, interpolationValue, curveValues) : undefined) : undefined
+                const interpolationValues = typeof interpolation.value === "number" ? interpolation.value : params && interpolation.value(params)
+                const interpolatedValues = interpolationValues !== undefined ? zoomValues.values.map((curveValues, i) => {
+                    const v = typeof interpolationValues === "number" ? interpolationValues : interpolationValues[i]
+
+                    return v !== undefined ? getInterpolatedValue(interpolation.axis, v, curveValues) : undefined
+                }) : undefined
 
                 return {
-                    interpolationValue,
+                    interpolationValues,
                     interpolatedValues
                 }
             }
@@ -207,21 +211,21 @@ export const PointChart = React.memo(
         });
 
         const createPoint = React.useCallback(
-            (xCoord: number, yCoord: number, xVal: number, yVal: number, index: number, type = PointType.Data) => {
+            (xCoord: number, yCoord: number, xVal: number, yVal: number, curveIndex: number, pointIndex: number, type = PointType.Data) => {
                 const r = type === PointType.Data ? pointR : interpolatedPointR
                 const valueInfoItem: PointChartItemInfo = {
-                    index,
+                    index: pointIndex,
                     coords: { x1: xCoord - r, x2: xCoord + r, y1: yCoord - r, y2: yCoord + r },
                     values: { x: xVal, y: yVal },
                 };
-                const isActive = isPointActive(index);
+                const isActive = isPointActive(pointIndex);
 
                 valueInfoItemsRef.current.push(valueInfoItem);
 
                 return (
                     <circle
-                        key={`c${index}`}
-                        className={`chart__item${isActive ? " chart__item--active" : ""} chart__point${isActive ? " chart__point--active" : ""}${type === PointType.Interpolated ? " chart__interpolated-point" : ""}`}
+                        key={`c${pointIndex}`}
+                        className={`chart__item chart__item--curve-${curveIndex}${isActive ? " chart__item--active" : ""} chart__point chart__point--curve-${curveIndex}${isActive ? " chart__point--active" : ""}${type === PointType.Interpolated ? " chart__interpolated-point" : ""}`}
                         r={r}
                         cx={xCoord}
                         cy={yCoord}
@@ -232,7 +236,7 @@ export const PointChart = React.memo(
                             e.stopPropagation();
 
                             if (e.ctrlKey) {
-                                isActive ? removeValueInfoItem(index) : addValueInfoItem(valueInfoItem);
+                                isActive ? removeValueInfoItem(pointIndex) : addValueInfoItem(valueInfoItem);
                             } else {
                                 if (activePoints.length > 1) {
                                     replaceValueInfoItems([valueInfoItem])
@@ -261,39 +265,43 @@ export const PointChart = React.memo(
         const plot = React.useCallback(() => {
             valueInfoItemsRef.current = [];
 
-            return zoomValues.values.map(curveValues => curveValues.map(([xVal, yVal], i) => {
+            let pointIndex = 0
+
+            return zoomValues.values.map((curveValues, curveIndex) => curveValues.map(([xVal, yVal]) => {
                 const xCoord = getCoord(xOrigin, gridWidth, xVal - zoomValues.minMax[0][0], zoomValues.minMax[0][1] - zoomValues.minMax[0][0])
                 const yCoord = getCoord(yOrigin, -gridHeight, yVal - zoomValues.minMax[1][0], zoomValues.minMax[1][1] - zoomValues.minMax[1][0])
 
-                return createPoint(xCoord, yCoord, xVal, yVal, i);
+                return createPoint(xCoord, yCoord, xVal, yVal, curveIndex, pointIndex++);
             }));
         }, [createPoint, gridHeight, gridWidth, valueInfoItemsRef, zoomValues, xOrigin, yOrigin]);
 
         const plotWithConnections = React.useCallback(() => {
             valueInfoItemsRef.current = [];
 
+            const getCoords = (xVal: number | undefined, yVal: number | undefined) => ({ x: xVal !== undefined ? getCoord(xOrigin, gridWidth, xVal - zoomValues.minMax[0][0], zoomValues.minMax[0][1] - zoomValues.minMax[0][0]) : undefined, y: yVal !== undefined ? getCoord(yOrigin, -gridHeight, yVal - zoomValues.minMax[1][0], zoomValues.minMax[1][1] - zoomValues.minMax[1][0]) : undefined });
             let els: JSX.Element[] = [];
 
-            for (let i = 0; i < zoomValues.values.length; i++) {
-                for (let j = 0, prevCoords = { x: xOrigin, y: yOrigin }; j < zoomValues.values[i].length; j++) {
-                    const [xVal, yVal] = zoomValues.values[i][j];
-                    const coords = { x: getCoord(xOrigin, gridWidth, xVal - zoomValues.minMax[0][0], zoomValues.minMax[0][1] - zoomValues.minMax[0][0]), y: getCoord(yOrigin, -gridHeight, yVal - zoomValues.minMax[1][0], zoomValues.minMax[1][1] - zoomValues.minMax[1][0]) };
+            for (let i = 0, pointIndex = 0; i < zoomValues.values.length; i++) {
+                for (let j = 0, coords = getCoords(...(zoomValues.values[i][j] ?? [])), nextCoords = getCoords(...(zoomValues.values[i][j + 1] ?? [])); j < zoomValues.values[i].length; j++, pointIndex++, coords = nextCoords, nextCoords = getCoords(...(zoomValues.values[i][j + 1] ?? []))) {
 
-                    els.unshift(
-                        <line
-                            key={`pl${j}`}
-                            className="chart__connection-line"
-                            x1={prevCoords.x}
-                            y1={prevCoords.y}
-                            x2={coords.x}
-                            y2={coords.y}
-                            shapeRendering={"geometricPrecision"}
-                        />
-                    );
+                    if (coords.x !== undefined && coords.y !== undefined) {
+                        els.push(createPoint(coords.x, coords.y, ...zoomValues.values[i][j], i, pointIndex));
 
-                    els.push(createPoint(coords.x, coords.y, xVal, yVal, j));
+                        if (nextCoords.x !== undefined && nextCoords.y !== undefined) {
+                            els.unshift(
+                                <line
+                                    key={`pl${pointIndex}`}
+                                    className={`chart__connection-line chart__connection-line--curve-${i}`}
+                                    x1={coords.x}
+                                    y1={coords.y}
+                                    x2={nextCoords.x}
+                                    y2={nextCoords.y}
+                                    shapeRendering={"geometricPrecision"}
+                                />
+                            );
 
-                    prevCoords = coords;
+                        }
+                    }
                 }
             }
 
@@ -306,7 +314,9 @@ export const PointChart = React.memo(
 
         const interpolatedPoints = React.useMemo(() => {
             if (interpolation && interpolationValues?.interpolatedValues !== undefined && interpolationValues?.interpolationValue !== undefined) {
-                return interpolationValues.interpolatedValues.map(interpolatedValue => {
+                let pointIndex = zoomValues.values.reduce((sum, curveValues) => sum + curveValues.length, 0)
+
+                return interpolationValues.interpolatedValues.map((interpolatedValue, i) => {
                     if (interpolationValues.interpolationValue !== undefined && interpolatedValue !== undefined) {
                         const xInterpolationValue = interpolation.axis === "x" ? interpolationValues.interpolationValue : interpolatedValue
                         const yInterpolationValue = interpolation.axis === "y" ? interpolationValues.interpolationValue : interpolatedValue
@@ -314,14 +324,14 @@ export const PointChart = React.memo(
                         const xCoord = getCoord(xOrigin, gridWidth, xInterpolationValue - zoomValues.minMax[0][0], zoomValues.minMax[0][1] - zoomValues.minMax[0][0])
                         const yCoord = getCoord(yOrigin, -gridHeight, yInterpolationValue - zoomValues.minMax[1][0], zoomValues.minMax[1][1] - zoomValues.minMax[1][0])
 
-                        const interpolatedPoint = createPoint(xCoord, yCoord, xInterpolationValue, yInterpolationValue, points.length, PointType.Interpolated)
+                        const interpolatedPoint = createPoint(xCoord, yCoord, xInterpolationValue, yInterpolationValue, i, pointIndex++, PointType.Interpolated)
 
                         return interpolatedPoint
                     }
                 })
 
             }
-        }, [interpolationValues?.interpolatedValues, interpolationValues?.interpolationValue, createPoint, xOrigin, gridWidth, yOrigin, gridHeight, zoomValues, interpolation, points.length]);
+        }, [interpolationValues?.interpolatedValues, interpolationValues?.interpolationValue, createPoint, xOrigin, gridWidth, yOrigin, gridHeight, zoomValues, interpolation]);
 
         const onKeyDown: React.KeyboardEventHandler<SVGSVGElement> = React.useCallback(
             e => {
