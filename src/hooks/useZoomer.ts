@@ -92,8 +92,8 @@ const computeZoomValues = (
   const valueIntervalPos = axis === "x" ? valueInterval * cursorRatioPos : valueInterval * (1 - cursorRatioPos);
   const minMaxLimit = minMax[0] + valueIntervalPos;
   const newMinMax: [number, number] = [
-    minMax[0] + valueIntervalPos * (1 - 1 / scale) * zoomVec,
-    minMax[1] - (valueInterval - valueIntervalPos) * (1 - 1 / scale) * zoomVec,
+    zoomVec === 1 ? minMax[0] + valueIntervalPos * (1 - 1 / scale) : minMax[0] + valueIntervalPos - (valueIntervalPos * scale),
+    zoomVec === 1 ? minMax[1] - (valueInterval - valueIntervalPos) * (1 - 1 / scale) : minMax[0] + valueIntervalPos + (valueInterval - valueIntervalPos) * scale,
   ];
 
   if (newMinMax[0] >= minMaxLimit) {
