@@ -12,13 +12,18 @@ enum PointType {
     Interpolated
 }
 
-export type InterpolationSettings = { axis: "x" | "y"; value: number | ((params: Parameters<Renderer>[0]) => number | (number | undefined)[]), pointR: number }
+export type TInterpolationSettings = { axis: "x" | "y"; value: number | (number | undefined)[] | ((params: Parameters<Renderer>[0]) => number | (number | undefined)[]), pointR: number }
+
+type TInterpolationValues = {
+    interpolationValues: (number | undefined)[] | undefined,
+    interpolatedValues: (number | undefined)[] | undefined
+}
 
 export type PointChartProps = ChartProps & {
     pointR: number;
     values: AxesValues[]; // [x, y]; values themself, not coordinates
     connectPoints?: boolean;
-    interpolation?: InterpolationSettings
+    interpolation?: TInterpolationSettings
 };
 
 export const PointChart = React.memo(
@@ -78,14 +83,15 @@ export const PointChart = React.memo(
         const pointR = basePointR / pointRScale
         const interpolatedPointR = (interpolation?.pointR ?? 0) / pointRScale
 
-        const handleInterpolationRef = React.useRef((params?: Parameters<Renderer>[0]) => {
+        const handleInterpolationRef = React.useRef((params?: Parameters<Renderer>[0]): TInterpolationValues | undefined => {
             if (interpolation) {
-                const interpolationValues = typeof interpolation.value === "number" ? interpolation.value : params && interpolation.value(params)
-                const interpolatedValues = interpolationValues !== undefined ? zoomValues.values.map((curveValues, i) => {
-                    const v = typeof interpolationValues === "number" ? interpolationValues : interpolationValues[i]
+                const interpolationValue = typeof interpolation.value === "function" ? params && interpolation.value(params) : interpolation.value
+                const interpolationValues = typeof interpolationValue === "number" ? zoomValues.values.map(() => interpolationValue) : Array.isArray(interpolationValue) ? interpolationValue : []
+                const interpolatedValues = zoomValues.values.map((curveValues, i) => {
+                    const v = interpolationValues[i]
 
                     return v !== undefined ? getInterpolatedValue(interpolation.axis, v, curveValues) : undefined
-                }) : undefined
+                })
 
                 return {
                     interpolationValues,
@@ -96,10 +102,7 @@ export const PointChart = React.memo(
             return undefined
         })
 
-        const [interpolationValues, setInterpolationValues] = React.useState<Partial<{
-            interpolationValue: number,
-            interpolatedValues: (number | undefined)[]
-        }> | undefined>()
+        const [interpolationValues, setInterpolationValues] = React.useState<TInterpolationValues | undefined>()
 
         const framerRef = React.useRef(createFramer({
             renderer: (params) => {
@@ -313,25 +316,28 @@ export const PointChart = React.memo(
         }, [connectPoints, plotWithConnections, plot]);
 
         const interpolatedPoints = React.useMemo(() => {
-            if (interpolation && interpolationValues?.interpolatedValues !== undefined && interpolationValues?.interpolationValue !== undefined) {
+            if (interpolation && interpolationValues?.interpolatedValues !== undefined && interpolationValues?.interpolationValues !== undefined) {
                 let pointIndex = zoomValues.values.reduce((sum, curveValues) => sum + curveValues.length, 0)
 
-                return interpolationValues.interpolatedValues.map((interpolatedValue, i) => {
-                    if (interpolationValues.interpolationValue !== undefined && interpolatedValue !== undefined) {
-                        const xInterpolationValue = interpolation.axis === "x" ? interpolationValues.interpolationValue : interpolatedValue
-                        const yInterpolationValue = interpolation.axis === "y" ? interpolationValues.interpolationValue : interpolatedValue
+                return zoomValues.values.map((_curveValues, curveIndex) => {
+                    const interpolationValue = interpolationValues.interpolationValues?.[curveIndex]
+                    const interpolatedValue = interpolationValues.interpolatedValues?.[curveIndex]
+
+                    if (interpolationValue !== undefined && interpolatedValue !== undefined) {
+                        const xInterpolationValue = interpolation.axis === "x" ? interpolationValue : interpolatedValue
+                        const yInterpolationValue = interpolation.axis === "y" ? interpolationValue : interpolatedValue
 
                         const xCoord = getCoord(xOrigin, gridWidth, xInterpolationValue - zoomValues.minMax[0][0], zoomValues.minMax[0][1] - zoomValues.minMax[0][0])
                         const yCoord = getCoord(yOrigin, -gridHeight, yInterpolationValue - zoomValues.minMax[1][0], zoomValues.minMax[1][1] - zoomValues.minMax[1][0])
 
-                        const interpolatedPoint = createPoint(xCoord, yCoord, xInterpolationValue, yInterpolationValue, i, pointIndex++, PointType.Interpolated)
+                        const interpolatedPoint = createPoint(xCoord, yCoord, xInterpolationValue, yInterpolationValue, curveIndex, pointIndex++, PointType.Interpolated)
 
                         return interpolatedPoint
                     }
                 })
 
             }
-        }, [interpolationValues?.interpolatedValues, interpolationValues?.interpolationValue, createPoint, xOrigin, gridWidth, yOrigin, gridHeight, zoomValues, interpolation]);
+        }, [interpolationValues, createPoint, xOrigin, gridWidth, yOrigin, gridHeight, zoomValues, interpolation]);
 
         const onKeyDown: React.KeyboardEventHandler<SVGSVGElement> = React.useCallback(
             e => {
